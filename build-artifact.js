@@ -53,7 +53,7 @@ const shim = `
 })();
 </script>`;
 
-const scripts = ['js/core.js', 'js/data.js', 'js/world.js', 'js/ai.js', 'js/game.js']
+const scripts = ['vendor/three.min.js', 'js/core.js', 'js/data.js', 'js/world.js', 'js/ai.js', 'js/render3d.js', 'js/game.js']
   .map(f => '<script>\n' + read(f).replace(/<\/script>/gi, '<\\/script>') + '\n</script>')
   .join('\n');
 

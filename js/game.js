@@ -21,13 +21,16 @@ const Game = {
 
   opts: {
     bots: 100, diff: 'normal', autofire: true, aim: 2,
-    speed: 1, sound: true, hand: 0, quality: 0
+    speed: 1, sound: true, hand: 0, quality: 0, view: 1, sens: 1
   },
 
   /* ------------------------------------------------------ boot */
   init() {
     this.canvas = document.getElementById('game');
-    this.ctx = this.canvas.getContext('2d', { alpha: false });
+    // In 3D liegt diese Leinwand als transparente Ebene ueber dem WebGL-Bild
+    // (Sticks, Fadenkreuz), deshalb kein alpha:false mehr.
+    this.ctx = this.canvas.getContext('2d', { alpha: true });
+    this.glCanvas = document.getElementById('gl');
     this.mapC = document.getElementById('mapC');
     this.mapX = this.mapC.getContext('2d');
     this.el = {
@@ -60,6 +63,10 @@ const Game = {
 
     // background canvas for the ground texture (drawn once)
     this.groundPat = this.makeGround();
+    if (R3D.init(this.glCanvas)) R3D._capInit();
+    else { this.opts.view = 0; }        // kein WebGL -> Top-Down bleibt spielbar
+    this.applyView();
+    this.resize();                      // erst jetzt kennt R3D seine Leinwandgroesse
     this.last = performance.now();
     requestAnimationFrame(t => this.frame(t));
   },
@@ -74,6 +81,7 @@ const Game = {
     this.canvas.style.width = this.W + 'px';
     this.canvas.style.height = this.H + 'px';
     this.zoom = clamp(Math.min(this.W, this.H) / 660, 0.32, 1.15);
+    if (R3D.ok) R3D.resize(this.W, this.H, this.dpr);
     this.lowFx = (this.W * this.H > 900000) || this.opts.quality === 2;
     Input.cache();
   },
@@ -109,6 +117,7 @@ const Game = {
       case 'speed': o.speed = (o.speed + 1) % 3; break;
       case 'sound': o.sound = !o.sound; Snd.mute(o.sound); break;
       case 'hand': o.hand = o.hand ? 0 : 1; Input.leftHanded = o.hand === 1; break;
+      case 'view': o.view = o.view ? 0 : 1; this.applyView(); break;
       case 'quality': o.quality = (o.quality + 1) % 3; this.resize(); break;
     }
     Store.data.opts = o; Store.save();
@@ -124,12 +133,22 @@ const Game = {
       speed: ['Normal', 'Schnell', 'Blitz'][o.speed],
       sound: o.sound ? 'An' : 'Aus',
       hand: o.hand ? 'Links' : 'Rechts',
-      quality: ['Auto', 'Hoch', 'Sparsam'][o.quality]
+      quality: ['Auto', 'Hoch', 'Sparsam'][o.quality],
+      view: o.view ? 'Ego 3D' : 'Top-Down'
     };
     document.querySelectorAll('.opt').forEach(b => {
       const k = b.dataset.opt;
       b.innerHTML = b.textContent.split(':')[0] + ': <b>' + txt[k] + '</b>';
     });
+  },
+
+  get v3() { return this.opts.view === 1 && R3D.ok; },
+
+  applyView() {
+    const on = this.v3;
+    this.glCanvas.classList.toggle('hide', !on);
+    document.getElementById('cross').classList.toggle('hide', !on);
+    this.refreshOpts();
   },
 
   refreshStats() {
@@ -146,6 +165,7 @@ const Game = {
     this.timeScale = [1, 0.62, 0.42][this.opts.speed];
 
     World.gen((Math.random() * 1e9) | 0);
+    if (R3D.ok) { R3D.buildWorld(); R3D.fx.length = 0; }
     ACTOR_ID = 1;
     this.actors.length = 0; this.bots.length = 0;
     this.bullets.length = 0; this.parts.length = 0; this.texts.length = 0; this.rings.length = 0;
@@ -206,6 +226,7 @@ const Game = {
     this.el.menu.classList.add('hide');
     this.el.result.classList.add('hide');
     this.el.hud.classList.remove('hide');
+    document.getElementById('cross').classList.toggle('hide', !this.v3);
     this.state = 'bus';
     this.cam.x = this.bus.x; this.cam.y = this.bus.y;
     this.toast('SPRINGEN!', 1.4);
@@ -334,9 +355,16 @@ const Game = {
     if (d.phase === 'bus' || d.phase === 'ground') return;
     const fall = 0.30;                                  // ~3.3s from bus to boots
     d.h -= fall * dt;
-    const steer = a === this.player
-      ? (Input.move.mag > 0.15 ? { x: Input.move.x, y: Input.move.y, m: Input.move.mag } : null)
-      : null;
+    let steer = null;
+    if (a === this.player && Input.move.mag > 0.15) {
+      if (Game.v3) {
+        const c = Math.cos(a.aimAng), sn = Math.sin(a.aimAng);
+        const fx = c * -Input.move.y + -sn * Input.move.x;
+        const fy = sn * -Input.move.y + c * Input.move.x;
+        const n = Math.hypot(fx, fy) || 1;
+        steer = { x: fx / n, y: fy / n };
+      } else steer = { x: Input.move.x, y: Input.move.y };
+    }
     let ax, ay;
     if (steer) { ax = steer.x; ay = steer.y; }
     else {
@@ -347,7 +375,7 @@ const Game = {
     const sp = d.h > 0.45 ? 620 : 300;                  // glider slows you down
     a.x = clamp(a.x + ax * sp * dt, 40, MAP - 40);
     a.y = clamp(a.y + ay * sp * dt, 40, MAP - 40);
-    if (ax || ay) { a.ang = Math.atan2(ay, ax); a.aimAng = a.ang; }
+    if ((ax || ay) && !(a === this.player && Game.v3)) { a.ang = Math.atan2(ay, ax); a.aimAng = a.ang; }
     if (d.h <= 0) {
       d.h = 0; d.phase = 'ground';
       const pos = World.collide(a.x, a.y, a.r);
@@ -430,28 +458,60 @@ const Game = {
     }
     if (p.reloadT > 0) { p.reloadT -= dt; if (p.reloadT <= 0) this.finishReload(p); }
 
-    // --- movement
+    // --- movement + aiming
     const sprint = Input.btn.sprint ? 1.34 : 1;
     const mv = Input.move;
-    if (mv.mag > 0) {
-      const sp = G_SPEED * sprint * mv.mag;
-      const pos = World.collide(p.x + mv.x * sp * dt, p.y + mv.y * sp * dt, p.r);
-      p.x = pos.x; p.y = pos.y;
-      if (Input.aim.mag < 0.2) { p.ang = angApproach(p.ang, Math.atan2(mv.y, mv.x), dt * 12); p.aimAng = p.ang; }
-    }
-
-    // --- aiming + aim assist
     let firing = Input.btn.fire;
-    if (Input.aim.mag > 0.2) {
-      let want = Math.atan2(Input.aim.y, Input.aim.x);
-      const lock = this.aimAssist(p, want);
+
+    if (this.v3) {
+      // Ego: der rechte Finger dreht den Kopf (Wisch = Maus), der linke laeuft
+      // relativ zur Blickrichtung. Ohne das laeuft man in der Ego-Sicht seitwaerts,
+      // wenn man sich umschaut.
+      const look = Input.lookDelta();
+      const sens = 0.0042 * (this.opts.sens || 1);
+      p.aimAng += look.dx * sens;
+      p.pitch = clamp((p.pitch || 0) - look.dy * sens, -1.25, 1.25);
+      if (p.aimAng > Math.PI) p.aimAng -= TAU; else if (p.aimAng < -Math.PI) p.aimAng += TAU;
+
+      const lock = this.aimAssist(p, p.aimAng);
       if (lock) {
-        const strength = [0, 0.35, 0.7][this.opts.aim];
-        want = angApproach(want, lock.ang, Math.abs(angDiff(want, lock.ang)) * strength);
-        if (this.opts.autofire) firing = true;
+        const strength = [0, 0.22, 0.44][this.opts.aim] * dt * 12;
+        p.aimAng = angApproach(p.aimAng, lock.ang, Math.abs(angDiff(p.aimAng, lock.ang)) * clamp(strength, 0, 1));
+        const dy = (lock.actor.y3 || BODY_H * 0.6) - EYE;
+        p.pitch = lerp(p.pitch, Math.atan2(dy, lock.d), clamp(strength, 0, 1));
+        if (this.opts.autofire && Math.abs(angDiff(p.aimAng, lock.ang)) < 0.12) firing = true;
       }
-      p.aimAng = angApproach(p.aimAng, want, dt * 16);
       p.ang = p.aimAng;
+      this.el.crossHit = lock;
+      document.getElementById('cross').classList.toggle('hit', !!lock);
+
+      if (mv.mag > 0) {
+        const c = Math.cos(p.aimAng), sn = Math.sin(p.aimAng);
+        const fx = c * -mv.y + -sn * mv.x;      // vorwaerts + seitwaerts
+        const fy = sn * -mv.y + c * mv.x;
+        const n = Math.hypot(fx, fy) || 1;
+        const sp = G_SPEED * sprint * mv.mag;
+        const pos = World.collide(p.x + fx / n * sp * dt, p.y + fy / n * sp * dt, p.r);
+        p.x = pos.x; p.y = pos.y;
+      }
+    } else {
+      if (mv.mag > 0) {
+        const sp = G_SPEED * sprint * mv.mag;
+        const pos = World.collide(p.x + mv.x * sp * dt, p.y + mv.y * sp * dt, p.r);
+        p.x = pos.x; p.y = pos.y;
+        if (Input.aim.mag < 0.2) { p.ang = angApproach(p.ang, Math.atan2(mv.y, mv.x), dt * 12); p.aimAng = p.ang; }
+      }
+      if (Input.aim.mag > 0.2) {
+        let want = Math.atan2(Input.aim.y, Input.aim.x);
+        const lock = this.aimAssist(p, want);
+        if (lock) {
+          const strength = [0, 0.35, 0.7][this.opts.aim];
+          want = angApproach(want, lock.ang, Math.abs(angDiff(want, lock.ang)) * strength);
+          if (this.opts.autofire) firing = true;
+        }
+        p.aimAng = angApproach(p.aimAng, want, dt * 16);
+        p.ang = p.aimAng;
+      }
     }
 
     // --- buttons
@@ -503,7 +563,7 @@ const Game = {
   camFollow(dt) {
     const p = this.player;
     // lead the camera toward where you're aiming so you see what you shoot
-    const lead = Input.aim.mag > 0.2 ? 110 : 0;
+    const lead = (!this.v3 && Input.aim.mag > 0.2) ? 110 : 0;
     const tx = p.x + Math.cos(p.aimAng) * lead;
     const ty = p.y + Math.sin(p.aimAng) * lead;
     const k = 1 - Math.pow(0.0001, dt);
@@ -535,6 +595,9 @@ const Game = {
     return true;
   },
 
+  /** Mündungshöhe eines Akteurs (Kamera beim Spieler, Brust beim Bot) */
+  muzzleY(a) { return a === this.player ? EYE : BODY_H * 0.62; },
+
   spawnBullet(a, ang, g) {
     let b = null;
     const L = this.bullets;
@@ -547,8 +610,13 @@ const Game = {
     b.x = a.x + Math.cos(ang) * (a.r + 6);
     b.y = a.y + Math.sin(ang) * (a.r + 6);
     b.px = b.x; b.py = b.y;
-    b.vx = Math.cos(ang) * g.speed;
-    b.vy = Math.sin(ang) * g.speed;
+    // Neigung nur in der Ego-Sicht: der Top-Down-Modus kennt keine Höhe.
+    const pitch = (this.v3 && a.pitch) ? a.pitch : 0;
+    const flat = Math.cos(pitch);
+    b.vx = Math.cos(ang) * g.speed * flat;
+    b.vy = Math.sin(ang) * g.speed * flat;
+    b.vz = Math.sin(pitch) * g.speed;
+    b.y3 = this.muzzleY(a);
     b.dmg = g.dmg * (a.isBot ? AI.D.dmg : 1);
     b.left = g.range;
     b.owner = a;
@@ -637,13 +705,19 @@ const Game = {
     for (let i = 0; i < list.length; i++) {
       const b = list[i];
       if (!b.on) continue;
-      const sp = Math.hypot(b.vx, b.vy);
+      const sp = Math.hypot(b.vx, b.vy, b.vz || 0);
       const steps = Math.max(1, Math.ceil(sp * dt / 26));   // no tunnelling through walls
       const sdt = dt / steps;
       for (let s = 0; s < steps && b.on; s++) {
         b.px = b.x; b.py = b.y;
         b.x += b.vx * sdt; b.y += b.vy * sdt;
+        b.y3 += (b.vz || 0) * sdt;
         b.left -= sp * sdt;
+        if (b.y3 <= 0) {                                    // Einschlag im Boden
+          if (b.rocket) this.explode(b.x, b.y, b);
+          else { this.spark3(b.x, 4, b.y, 5, .2); this.endBullet(b); }
+          break;
+        }
         if (b.left <= 0 || b.x < 0 || b.y < 0 || b.x > MAP || b.y > MAP) { this.endBullet(b, false); break; }
         if (this.bulletHit(b)) break;
       }
@@ -657,6 +731,7 @@ const Game = {
       const o = near[i];
       if (o === b.owner || !o.alive || o.drop.phase !== 'ground') continue;
       if (dist2(b.x, b.y, o.x, o.y) > (o.r + 4) * (o.r + 4)) continue;
+      if (b.y3 < 0 || b.y3 > BODY_H) continue;             // über den Kopf / unter die Füße
       if (b.rocket) { this.explode(b.x, b.y, b); return true; }
       const dead = o.hurt(b.dmg, b.owner);
       this.hitFx(b.x, b.y, b.dmg, o === this.player, o);
@@ -672,6 +747,7 @@ const Game = {
       const s = built[i];
       if (s.hp <= 0) continue;
       if (b.x < s.bx || b.x > s.bx2 || b.y < s.by || b.y > s.by2) continue;
+      if (b.y3 > BUILT_H * (s.buildT > 0 ? clamp(1 - s.buildT / s.build, .15, 1) : 1)) continue;
       if (b.rocket) { this.explode(b.x, b.y, b); return true; }
       World.damageStructure(s, b.dmg);
       this.spark(b.x, b.y, Math.atan2(-b.vy, -b.vx), 160, MAT_INFO[s.mat].col, 0.2);
@@ -685,9 +761,13 @@ const Game = {
       if (o.w !== undefined) {
         if (!o.solid) continue;
         if (b.x < o.x || b.x > o.x2 || b.y < o.y || b.y > o.y2) continue;
+        if (b.y3 > WALL_H) continue;                        // über das Dach hinweg
       } else {
         if (o.hp <= 0 || o.type === 'crate') continue;
         if (dist2(b.x, b.y, o.x, o.y) > (o.r * 0.62) * (o.r * 0.62)) continue;
+        // Bäume blocken nur am Stamm: die Krone hängt über Kopfhöhe
+        if (o.type === 'tree' && b.y3 > 150 * o.s) continue;
+        if (o.type === 'rock' && b.y3 > o.r * 0.95) continue;   // Findlinge sind kniehoch
         o.hp -= b.dmg * 0.5;
       }
       if (b.rocket) { this.explode(b.x, b.y, b); return true; }
@@ -704,6 +784,8 @@ const Game = {
     b.on = false;
     Snd.play('boom', b.owner === this.player ? 1 : this.volAt(x, y));
     this.rings.push({ x, y, r: 10, max: b.aoe, life: 0.45, t: 0.45, col: '#ffb257' });
+    if (this.v3) for (let i = 0; i < 10; i++)
+      this.spark3(x + rnd(-40, 40), 20 + rnd(0, 70), y + rnd(-40, 40), rnd(10, 22), rnd(.25, .55));
     if (!this.lowFx) for (let i = 0; i < 14; i++) this.spark(x, y, rnd(TAU), rnd(120, 460), i % 2 ? '#ffd08a' : '#ff7a3a', rnd(0.2, 0.5));
     const near = this.aGrid.query(x, y, b.aoe + 40, this._tmp);
     for (let i = 0; i < near.length; i++) {
@@ -998,6 +1080,9 @@ Object.assign(Game, {
   },
 
   /* ------------------------------------------------------ effects */
+  /** Funke in Weltkoordinaten inkl. Höhe — im Top-Down ignoriert */
+  spark3(x, h, z, size, life) { if (R3D.ok && this.v3) R3D.spark(x, h, z, size, life); },
+
   spark(x, y, ang, sp, col, life) {
     if (this.parts.length > 320) return;
     let p = null;
@@ -1019,6 +1104,7 @@ Object.assign(Game, {
   },
 
   hitFx(x, y, dmg, isMe, victim) {
+    if (this.v3) this.spark3(x, victim ? BODY_H * 0.6 : EYE, y, 7, 0.22);
     if (!this.lowFx) for (let i = 0; i < 3; i++) this.spark(x, y, rnd(TAU), rnd(70, 190), isMe ? '#ff6b6b' : '#ffe08a', 0.22);
     if (!isMe && victim && dist(x, y, this.player.x, this.player.y) < 900)
       this.floatText(x + rnd(-6, 6), y - 14, Math.round(dmg), victim.sh > 0 ? '#7fe4ff' : '#ffffff', 0.7);
@@ -1136,6 +1222,22 @@ Object.assign(Game, {
 
   render(dt) {
     const g = this.ctx, W = this.W, H = this.H;
+
+    // --- Ego-Perspektive: WebGL zeichnet die Welt, die 2D-Ebene nur noch die Sticks
+    if (this.v3) {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      if (this.state !== 'menu') {
+        R3D.render(dt);
+        g.save(); g.scale(this.dpr, this.dpr);
+        this.drawSticks(g);
+        g.restore();
+      }
+      this.mapT = (this.mapT || 0) + dt;
+      if (this.mapT > 0.12 && this.state !== 'menu') { this.mapT = 0; this.drawMinimap(); }
+      return;
+    }
+
     g.save();
     g.scale(this.dpr, this.dpr);
     g.fillStyle = '#101a2c';

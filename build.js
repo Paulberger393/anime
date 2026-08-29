@@ -8,7 +8,7 @@ const b64  = f => fs.readFileSync(path.join(ROOT, f)).toString('base64');
 let html = read('index.html');
 
 // 1) alle Skripte inline setzen (Reihenfolge wie im HTML)
-const scripts = ['js/core.js', 'js/data.js', 'js/world.js', 'js/ai.js', 'js/game.js'];
+const scripts = ['vendor/three.min.js', 'js/core.js', 'js/data.js', 'js/world.js', 'js/ai.js', 'js/render3d.js', 'js/game.js'];
 for (const s of scripts) {
   const tag = `<script src="${s}"></script>`;
   if (!html.includes(tag)) throw new Error('Script-Tag nicht gefunden: ' + s);
@@ -44,7 +44,7 @@ console.log('geschrieben:', out, (fs.statSync(out).size / 1024).toFixed(0) + ' K
 const { execFileSync } = require('child_process');
 const zip = path.join(ROOT, 'dist', 'schotter-royale-pwa.zip');
 const files = ['index.html', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png',
-               'manifest.webmanifest', 'sw.js', 'README.md',
+               'manifest.webmanifest', 'sw.js', 'README.md', 'vendor/three.min.js',
                ...fs.readdirSync(path.join(ROOT, 'js')).sort().map(f => 'js/' + f)];
 fs.rmSync(zip, { force: true });
 execFileSync('python3', ['-c', `

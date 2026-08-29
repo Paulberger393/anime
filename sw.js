@@ -1,10 +1,11 @@
 /* Schotter Royale — cache-first service worker.
    Everything the game needs is in this list, so after one visit it runs
    with the phone in flight mode. Bump CACHE to ship an update. */
-const CACHE = 'schotter-v1';
+const CACHE = 'schotter-v2';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
-  './js/core.js', './js/data.js', './js/world.js', './js/ai.js', './js/game.js',
+  './vendor/three.min.js',
+  './js/core.js', './js/data.js', './js/world.js', './js/ai.js', './js/render3d.js', './js/game.js',
   './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png'
 ];
 

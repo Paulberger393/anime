@@ -18,6 +18,7 @@
 html,body{position:fixed;inset:0;width:100%;height:100%;overflow:hidden;background:#080c18;
   overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
   font-family:"Avenir Next","Helvetica Neue",system-ui,-apple-system,sans-serif;color:#eaf0ff}
+#gl{position:absolute;inset:0;display:block;width:100%;height:100%}
 #game{position:absolute;inset:0;display:block;width:100%;height:100%}
 #hud{position:absolute;inset:0;pointer-events:none;
   padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 10px)
@@ -120,6 +121,16 @@ html,body{position:fixed;inset:0;width:100%;height:100%;overflow:hidden;backgrou
   #toast{font-size:13px}
 }
 
+/* Fadenkreuz: dünn und hell genug fürs Sonnenlicht, ohne die Sicht zu verstopfen */
+#cross{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;pointer-events:none}
+#cross::before,#cross::after{content:"";position:absolute;background:rgba(255,255,255,.85);
+  box-shadow:0 0 3px rgba(0,0,0,.9)}
+#cross::before{left:50%;top:0;width:2px;height:26px;margin-left:-1px}
+#cross::after{top:50%;left:0;height:2px;width:26px;margin-top:-1px}
+#cross i{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;
+  background:rgba(0,0,0,.55);box-shadow:0 0 0 1px rgba(255,255,255,.7)}
+#cross.hit::before,#cross.hit::after{background:#ff6b6b}
+
 #dmgFlash{position:absolute;inset:0;pointer-events:none;opacity:0;
   box-shadow:inset 0 0 120px 30px rgba(255,40,40,.85);transition:opacity .25s}
 
@@ -150,6 +161,7 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
 </style>
 </head>
 <body>
+<canvas id="gl"></canvas>
 <canvas id="game"></canvas>
 
 <div id="hud" class="hide">
@@ -174,6 +186,7 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
   <div id="toast"></div>
   <div id="hint" class="hide"></div>
   <div id="dmgFlash"></div>
+  <div id="cross"><i></i></div>
 
   <div class="btn" id="bFire"   data-act="fire"><div class="ic">🔫</div><div class="lb">FEUER</div></div>
   <div class="btn" id="bReload" data-act="reload"><div class="ic">🔄</div><div class="lb">NACHLADEN</div></div>
@@ -204,6 +217,7 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
     <button class="opt" data-opt="speed">Match-Tempo: <b>Schnell</b></button>
     <button class="opt" data-opt="sound">Sound: <b>An</b></button>
     <button class="opt" data-opt="hand">Layout: <b>Rechts</b></button>
+    <button class="opt" data-opt="view">Ansicht: <b>Ego 3D</b></button>
     <button class="opt" data-opt="quality">Grafik: <b>Auto</b></button>
   </div>
   <div id="stats"></div>
@@ -219,10 +233,12 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
   <button class="ghost" id="toMenu">HAUPTMENÜ</button>
 </div>
 
+<script src="vendor/three.min.js"></script>
 <script src="js/core.js"></script>
 <script src="js/data.js"></script>
 <script src="js/world.js"></script>
 <script src="js/ai.js"></script>
+<script src="js/render3d.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

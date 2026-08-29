@@ -17,7 +17,7 @@ class Actor {
     this.alive = true;
     this.x = 0; this.y = 0; this.vx = 0; this.vy = 0;
     this.r = 15;
-    this.ang = rnd(TAU); this.aimAng = this.ang;
+    this.ang = rnd(TAU); this.aimAng = this.ang; this.pitch = 0;
     this.hp = 100; this.maxHp = 100;
     this.sh = 0; this.maxSh = 100;
     this.mats = { wood: 0, brick: 0, metal: 0 };

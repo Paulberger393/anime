@@ -285,11 +285,13 @@ const World = {
       for (let j = 0; j < near.length; j++) {
         const o = near[j];
         if (o.w !== undefined) { if (x > o.x && x < o.x2 && y > o.y && y < o.y2) return true; }
-        else if (o.hp > 0 && o.type !== 'crate') {
-          // Trees count as cover here because bullets stop at them too. Leaving
-          // them out let bots "see" a target through a canopy and empty a whole
-          // magazine into the trunk.
-          const rr = o.r * (o.type === 'tree' ? 0.72 : 1);
+        else if (o.hp > 0 && o.type === 'tree') {
+          // Nur Baeume zaehlen als Sichtdeckung, weil nur an ihnen Kugeln auf
+          // Koerperhoehe haengen bleiben. Felsen sind kniehoch: darueber
+          // fliegt jeder Schuss, also darf die KI sie auch nicht fuer
+          // Deckung halten (sonst zielt sie auf ein Ziel, das sie trifft,
+          // oder haelt Feuer wegen eines Steins, der nichts aufhaelt).
+          const rr = o.r * 0.72;
           if (dist2(x, y, o.x, o.y) < rr * rr) return true;
         }
       }

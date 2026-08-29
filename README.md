@@ -1,12 +1,13 @@
 # 🎮 Schotter Royale
 
 Ein **komplett offline** spielbares Solo-Battle-Royale fürs iPhone — im Stil von Fortnite,
-aber als Top-Down-Shooter im Browser. Kein Server, kein Login, kein Internet nötig.
-Reines HTML/JS/Canvas, alles läuft lokal auf dem Handy.
+als **3D-Shooter aus der Ego-Perspektive**. Kein Server, kein Login, kein Internet nötig.
+Alles läuft lokal auf dem Handy.
 
 ![Genre](https://img.shields.io/badge/Modus-Solo%20Battle%20Royale-8a4fd8)
 ![Offline](https://img.shields.io/badge/Offline-100%25-3ddc84)
 ![Ziel](https://img.shields.io/badge/Plattform-iPhone%20(PWA)-4aa3ff)
+![Ansicht](https://img.shields.io/badge/Ansicht-Ego%203D-ff8a3a)
 
 ---
 
@@ -43,8 +44,8 @@ Pages ist das automatisch gegeben.
 
 | Eingabe | Wirkung |
 |---|---|
-| **Links ziehen** (irgendwo linke Bildschirmhälfte) | Laufen — der Stick erscheint unter dem Daumen |
-| **Rechts ziehen** | Zielen; mit Auto-Feuer wird automatisch geschossen, sobald jemand im Visier ist |
+| **Links ziehen** (irgendwo linke Bildschirmhälfte) | Laufen — der Stick erscheint unter dem Daumen, Bewegung ist blickrelativ |
+| **Rechts wischen** | Umschauen wie mit einer Maus (Drehen und Neigen); mit Auto-Feuer wird geschossen, sobald jemand im Fadenkreuz ist |
 | **FEUER** | Schießen |
 | **NACHLADEN** | Magazin füllen |
 | **HEILEN** | Bestes Heilitem benutzen (Verband, Medikit, Schild) |
@@ -101,6 +102,7 @@ Bewegung *und* Kugeln und lassen sich zerschießen.
 | **Match-Tempo** | Normal · Schnell (~3,5 Min) · Blitz — skaliert alle Sturmphasen |
 | **Sound** | An/Aus |
 | **Layout** | Rechts- oder Linkshänder (tauscht Lauf- und Zielstick) |
+| **Ansicht** | **Ego 3D** oder **Top-Down** (die 2D-Ansicht bleibt als Rückfallebene erhalten) |
 | **Grafik** | Auto (max. 2× Pixeldichte) · Hoch · Sparsam — bei älteren iPhones „Sparsam" |
 
 Siege, Kills und Rekorde werden lokal im Gerät gespeichert.
@@ -110,14 +112,38 @@ Siege, Kills und Rekorde werden lokal im Gerät gespeichert.
 ## Technik
 
 ```
-index.html      HUD, Layout, Safe-Area-Handling für iPhone-Notch
-js/core.js      Mathe, Multi-Touch-Eingabe, Web-Audio-Synthese, Speicher
-js/data.js      Waffen, Seltenheiten, Loot-Tabellen, Sturmphasen, Bot-Namen
-js/world.js     Inselgenerierung, Spatial Hash, Kollision, Bausystem
-js/ai.js        Bot-Gehirn mit zwei Detailstufen
-js/game.js      Match-Ablauf, Spieler, Geschosse, Rendering, HUD
-sw.js           Service Worker fürs Offline-Spielen
+index.html          HUD, Layout, Safe-Area-Handling für iPhone-Notch
+vendor/three.min.js three.js r149 (mitgeliefert, damit nichts nachgeladen wird)
+js/core.js          Mathe, Multi-Touch-Eingabe, Web-Audio-Synthese, Speicher
+js/data.js          Waffen, Seltenheiten, Loot-Tabellen, Sturmphasen, Bot-Namen
+js/world.js         Inselgenerierung, Spatial Hash, Kollision, Bausystem
+js/ai.js            Bot-Gehirn mit zwei Detailstufen
+js/render3d.js      Ego-Perspektive: Szene, Kulissen-Chunks, Figuren, Sturm
+js/game.js          Match-Ablauf, Spieler, Geschosse, HUD, 2D-Rückfallansicht
+sw.js               Service Worker fürs Offline-Spielen
 ```
+
+### Wie aus 2D 3D wurde
+
+Die Spielwelt ist weiterhin zweidimensional — das 3D-Bild legt sie nur auf die
+Ebene: Welt-x wird 3D-x, Welt-y wird 3D-z, Höhe ist die neue 3D-y-Achse. Dadurch
+laufen Kollision, KI, Sturm, Loot und Bauen unverändert weiter; getauscht wurden
+Renderer, Kamera und Eingabe. Maßstab: 50 Einheiten sind ein Meter.
+
+Geschosse haben seitdem eine echte Höhe. Nach oben zielen geht über den Gegner
+hinweg, über eine Hauswand hinweg schießen funktioniert, und Baumkronen hängen
+über Kopfhöhe — am Stamm bleibt eine Kugel hängen, an der Krone nicht.
+
+Die Kulisse ist in Chunks von 1100 Einheiten aufgeteilt, jeder mit eigenen
+InstancedMeshes. three.js prüft die Sichtbarkeit von `InstancedMesh` über die
+Bounding-Sphere der *Geometrie* — die teilen sich aber alle Chunks, weshalb das
+eingebaute Frustum-Culling hier nichts bringt. Deshalb cullt das Spiel selbst
+über Entfernung und Blickkegel: das drückt die Zeichenaufrufe von über 220 auf
+rund 60–130.
+
+Schattenwurf per Shadow-Map wäre bei 100 Figuren plus Wald zu teuer fürs Handy;
+stattdessen liegt unter jedem Objekt ein weicher Fleck. Kostet fast nichts und
+erdet die Szene genauso.
 
 Damit 100 Bots auf einem Handy flüssig laufen, arbeitet die KI mit **zwei
 Detailstufen**: Bots in der Nähe werden voll simuliert (echte Geschosse,
@@ -125,8 +151,10 @@ Sichtlinien-Prüfung, Deckung), weit entfernte Bots laufen mit 4 Hz und tragen i
 Duelle abstrakt aus. Kills, Loot und der Überlebenden-Zähler verhalten sich in beiden
 Stufen gleich — man merkt den Unterschied nur am Stromverbrauch.
 
-Gemessen (Chromium, iPhone-13-Viewport, 2× Pixeldichte): **60 fps mit 100 Bots**,
-Spiellogik 0,6 ms pro Frame.
+Gemessen (Chromium, iPhone-13-Viewport, 2× Pixeldichte): Spiellogik **1,3 ms pro
+Frame** in der Ego-Ansicht (0,7 ms im Top-Down), 111 Zeichenaufrufe, 48 000
+Dreiecke bei 100 Bots. Die Bildrate selbst ließ sich hier nicht sinnvoll messen —
+der Testrechner hat keine GPU und rasterisiert in Software.
 
 Kollisionen, Sichtlinien und Loot-Abfragen laufen über ein Spatial-Hash-Grid,
 Geschosse und Partikel über feste Pools ohne Neuallokation, und schnelle Projektile
@@ -136,9 +164,9 @@ werden in Teilschritten bewegt, damit nichts durch Wände tunnelt.
 
 ## Download / Einzeldatei
 
-`dist/schotter-royale.html` ist das komplette Spiel in **einer einzigen Datei** (147 KB,
-Code und Icons inline, keine externen Abhaengigkeiten). Am Rechner einfach
-doppelklicken — laeuft direkt im Browser, offline.
+`dist/schotter-royale.html` ist das komplette Spiel in **einer einzigen Datei**
+(771 KB — Code, three.js und Icons inline, keine externen Abhängigkeiten). Am
+Rechner einfach doppelklicken — läuft direkt im Browser, offline.
 
 Neu bauen nach Aenderungen am Quelltext:
 

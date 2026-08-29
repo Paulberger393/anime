@@ -177,7 +177,10 @@ const Input = {
     this.keys = {};
     addEventListener('keydown', e => { this.keys[e.code] = true; this.key(e.code, true); });
     addEventListener('keyup',   e => { this.keys[e.code] = false; this.key(e.code, false); });
-    c.addEventListener('mousemove', e => { this.mx = e.clientX; this.my = e.clientY; });
+    c.addEventListener('mousemove', e => {
+      if (this.mx !== undefined) { this.mdx = (this.mdx || 0) + e.clientX - this.mx; this.mdy = (this.mdy || 0) + e.clientY - this.my; }
+      this.mx = e.clientX; this.my = e.clientY;
+    });
     c.addEventListener('mousedown', e => { this.mouse = true; e.preventDefault(); });
     addEventListener('mouseup',     () => { this.mouse = false; });
   },
@@ -224,6 +227,7 @@ const Input = {
       if (stick.id !== null) continue;
       stick.id = t.identifier; stick.active = true;
       stick.ox = stick.cx = t.clientX; stick.oy = stick.cy = t.clientY;
+      stick.px = t.clientX; stick.py = t.clientY;      // fuer das Blick-Delta
       stick.x = stick.y = stick.mag = 0;
     }
   },
@@ -240,6 +244,11 @@ const Input = {
           s.oy += dy * (1 - this.R / d);
           dx *= this.R / d; dy *= this.R / d;
         }
+        // Ego-Perspektive dreht sich um die Fingerbewegung, nicht um die
+        // Auslenkung: gezogen wird wie mit einer Maus, nicht wie an einem Stick.
+        s.dxA = (s.dxA || 0) + (t.clientX - (s.px === undefined ? t.clientX : s.px));
+        s.dyA = (s.dyA || 0) + (t.clientY - (s.py === undefined ? t.clientY : s.py));
+        s.px = t.clientX; s.py = t.clientY;
         s.cx = t.clientX; s.cy = t.clientY;
         const m = Math.min(1, Math.hypot(dx, dy) / this.R);
         if (m < this.DEAD) { s.x = s.y = 0; s.mag = 0; }
@@ -260,7 +269,7 @@ const Input = {
         delete this.touchAct[t.identifier];
       }
       for (const s of [this.move, this.aim]) {
-        if (s.id === t.identifier) { s.id = null; s.active = false; s.x = s.y = s.mag = 0; }
+        if (s.id === t.identifier) { s.id = null; s.active = false; s.x = s.y = s.mag = 0; s.px = s.py = undefined; }
       }
     }
   },
@@ -285,6 +294,15 @@ const Input = {
     const fireEl = this.els.fire;
     if (this.mouse) this.btn.fire = true;
     else if (!fireEl || !fireEl.classList.contains('on')) this.btn.fire = false;
+  },
+
+  /** Blickbewegung seit dem letzten Bild; das Lesen setzt sie zurueck */
+  lookDelta() {
+    const s = this.aim;
+    const d = { dx: s.dxA || 0, dy: s.dyA || 0 };
+    s.dxA = 0; s.dyA = 0;
+    if (this.mdx || this.mdy) { d.dx += this.mdx; d.dy += this.mdy; this.mdx = this.mdy = 0; }
+    return d;
   },
 
   /** call once per frame after the game has read input */
