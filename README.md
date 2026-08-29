@@ -131,3 +131,22 @@ Spiellogik 0,6 ms pro Frame.
 Kollisionen, Sichtlinien und Loot-Abfragen laufen über ein Spatial-Hash-Grid,
 Geschosse und Partikel über feste Pools ohne Neuallokation, und schnelle Projektile
 werden in Teilschritten bewegt, damit nichts durch Wände tunnelt.
+
+---
+
+## Download / Einzeldatei
+
+`dist/schotter-royale.html` ist das komplette Spiel in **einer einzigen Datei** (147 KB,
+Code und Icons inline, keine externen Abhaengigkeiten). Am Rechner einfach
+doppelklicken — laeuft direkt im Browser, offline.
+
+Neu bauen nach Aenderungen am Quelltext:
+
+```bash
+node build.js
+```
+
+Hinweis: iOS oeffnet lokale HTML-Dateien aus der Dateien-App nur eingeschraenkt
+(Quick-Look fuehrt kein JavaScript aus). Fuers iPhone ist der Weg ueber GitHub
+Pages und "Zum Home-Bildschirm" der zuverlaessige — nur so gibt es auch Vollbild
+ohne Safari-Leiste.
