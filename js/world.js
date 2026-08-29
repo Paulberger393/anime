@@ -272,15 +272,26 @@ const World = {
   /** does the segment a→b hit a wall? cheap stepped sampling, good enough for AI LOS */
   losBlocked(ax, ay, bx, by) {
     const d = Math.hypot(bx - ax, by - ay);
-    const steps = Math.min(24, Math.ceil(d / 55));
+    const steps = Math.min(32, Math.ceil(d / 34));
     if (steps <= 0) return false;
     for (let i = 1; i < steps; i++) {
       const t = i / steps, x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+      const built = this.bGrid.query(x, y, 40, this._q4 || (this._q4 = []));
+      for (let j = 0; j < built.length; j++) {
+        const b = built[j];
+        if (b.hp > 0 && b.buildT <= 0 && x > b.bx && x < b.bx2 && y > b.by && y < b.by2) return true;
+      }
       const near = this.sGrid.query(x, y, 40, this._q3 || (this._q3 = []));
       for (let j = 0; j < near.length; j++) {
         const o = near[j];
         if (o.w !== undefined) { if (x > o.x && x < o.x2 && y > o.y && y < o.y2) return true; }
-        else if (o.type === 'rock' && o.hp > 0 && dist2(x, y, o.x, o.y) < o.r * o.r) return true;
+        else if (o.hp > 0 && o.type !== 'crate') {
+          // Trees count as cover here because bullets stop at them too. Leaving
+          // them out let bots "see" a target through a canopy and empty a whole
+          // magazine into the trunk.
+          const rr = o.r * (o.type === 'tree' ? 0.72 : 1);
+          if (dist2(x, y, o.x, o.y) < rr * rr) return true;
+        }
       }
     }
     return false;
