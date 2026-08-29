@@ -350,6 +350,14 @@ Object.assign(R3D, {
     if (p.drop.phase === 'bus') y = 3400;
     else if (air) y = EYE + p.drop.h * 3000;
 
+    // Im Bus und im freien Fall schaut die Kamera nach unten. Ohne das blickt
+    // man aus 68 m Hoehe waagerecht in den Himmel, sieht die Insel nie und
+    // merkt gar nicht, dass man abspringen soll.
+    this.dropPitch = this.dropPitch === undefined ? -1.15 : this.dropPitch;
+    if (p.drop.phase === 'bus') this.dropPitch = -1.05;
+    else if (air) this.dropPitch = lerp(-1.15, -0.45, 1 - p.drop.h);   // beim Sinken flacher
+    else this.dropPitch = null;
+
     // Kopfbewegung beim Laufen, gedämpft damit sie nicht seekrank macht
     const speed = Math.hypot(p.x - (this.lx || p.x), p.y - (this.lz || p.y)) / Math.max(dt, .001);
     this.lx = p.x; this.lz = p.y;
@@ -359,7 +367,10 @@ Object.assign(R3D, {
 
     this.cam.position.set(p.x, y + bob, p.y);
     // Welt-Winkel -> Kamera: aimAng 0 zeigt nach +x, three.js blickt nach -z
-    this.cam.rotation.set(p.pitch || 0, -(p.aimAng || 0) - Math.PI / 2, roll);
+    const pitch = this.dropPitch !== null && this.dropPitch !== undefined
+      ? this.dropPitch + clamp(p.pitch || 0, -0.5, 0.5)   // im Fall zusaetzlich frei umschauen
+      : (p.pitch || 0);
+    this.cam.rotation.set(pitch, -(p.aimAng || 0) - Math.PI / 2, roll);
 
     // Waffe folgt der Kamera verzögert (Trägheit) und zuckt beim Schuss
     const g = p.gun;

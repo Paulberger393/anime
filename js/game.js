@@ -21,7 +21,7 @@ const Game = {
 
   opts: {
     bots: 100, diff: 'normal', autofire: true, aim: 2,
-    speed: 1, sound: true, hand: 0, quality: 0, view: 1, sens: 1
+    speed: 1, sound: true, hand: 0, quality: 0, view: 1, sens: 1, quer: 0
   },
 
   /* ------------------------------------------------------ boot */
@@ -42,6 +42,7 @@ const Game = {
       alive: document.getElementById('alive'), storm: document.getElementById('storm'), kills: document.getElementById('kills'),
       feed: document.getElementById('feed'), toast: document.getElementById('toast'), hint: document.getElementById('hint'),
       flash: document.getElementById('dmgFlash'), buildBar: document.getElementById('buildBar'),
+      jump: document.getElementById('bJump'), alt: document.getElementById('alt'),
       stats: document.getElementById('stats'), res: document.getElementById('res'),
       resT: document.getElementById('resT'), resS: document.getElementById('resS')
     };
@@ -51,8 +52,8 @@ const Game = {
     Input.init();
     Input.leftHanded = this.opts.hand === 1;
     this.resize();
-    addEventListener('resize', () => this.resize());
-    addEventListener('orientationchange', () => setTimeout(() => this.resize(), 300));
+    addEventListener('resize', () => this.applyRotation());
+    addEventListener('orientationchange', () => setTimeout(() => this.applyRotation(), 300));
 
     document.getElementById('play').onclick = () => this.startMatch();
     document.getElementById('again').onclick = () => this.startMatch();
@@ -66,7 +67,7 @@ const Game = {
     if (R3D.init(this.glCanvas)) R3D._capInit();
     else { this.opts.view = 0; }        // kein WebGL -> Top-Down bleibt spielbar
     this.applyView();
-    this.resize();                      // erst jetzt kennt R3D seine Leinwandgroesse
+    this.applyRotation();               // setzt auch resize(), erst jetzt kennt R3D die Groesse
     this.last = performance.now();
     requestAnimationFrame(t => this.frame(t));
   },
@@ -75,7 +76,10 @@ const Game = {
     const q = this.opts.quality;
     const maxDpr = q === 2 ? 1 : q === 1 ? 3 : 2;
     this.dpr = Math.min(devicePixelRatio || 1, maxDpr);
-    this.W = innerWidth; this.H = innerHeight;
+    // Bei gedrehter Buehne sind Breite und Hoehe vertauscht.
+    const rot = document.body.classList.contains('quer') || document.body.classList.contains('quer2');
+    this.W = rot ? innerHeight : innerWidth;
+    this.H = rot ? innerWidth : innerHeight;
     this.canvas.width = Math.round(this.W * this.dpr);
     this.canvas.height = Math.round(this.H * this.dpr);
     this.canvas.style.width = this.W + 'px';
@@ -118,6 +122,7 @@ const Game = {
       case 'sound': o.sound = !o.sound; Snd.mute(o.sound); break;
       case 'hand': o.hand = o.hand ? 0 : 1; Input.leftHanded = o.hand === 1; break;
       case 'view': o.view = o.view ? 0 : 1; this.applyView(); break;
+      case 'quer': o.quer = (o.quer + 1) % 3; this.applyRotation(); break;
       case 'quality': o.quality = (o.quality + 1) % 3; this.resize(); break;
     }
     Store.data.opts = o; Store.save();
@@ -134,7 +139,8 @@ const Game = {
       sound: o.sound ? 'An' : 'Aus',
       hand: o.hand ? 'Links' : 'Rechts',
       quality: ['Auto', 'Hoch', 'Sparsam'][o.quality],
-      view: o.view ? 'Ego 3D' : 'Top-Down'
+      view: o.view ? 'Ego 3D' : 'Top-Down',
+      quer: ['Automatisch', 'Quer ↺', 'Quer ↻'][o.quer]
     };
     document.querySelectorAll('.opt').forEach(b => {
       const k = b.dataset.opt;
@@ -143,6 +149,19 @@ const Game = {
   },
 
   get v3() { return this.opts.view === 1 && R3D.ok; },
+
+  /** Erzwungene Querlage: nur sinnvoll, wenn das Geraet gerade hochkant steht. */
+  applyRotation() {
+    // Nur drehen, wenn das Geraet tatsaechlich hochkant steht — sonst
+    // wuerde die Buehne eine bereits quer liegende Anzeige wieder kippen.
+    const hochkant = innerHeight > innerWidth;
+    const mode = hochkant ? this.opts.quer : 0;
+    document.body.classList.toggle('quer', mode === 1);
+    document.body.classList.toggle('quer2', mode === 2);
+    Input.rot = mode;
+    this.resize();
+    setTimeout(() => Input.cache(), 40);
+  },
 
   applyView() {
     const on = this.v3;
@@ -226,7 +245,8 @@ const Game = {
     this.el.menu.classList.add('hide');
     this.el.result.classList.add('hide');
     this.el.hud.classList.remove('hide');
-    document.getElementById('cross').classList.toggle('hide', !this.v3);
+    document.getElementById('cross').classList.add('hide');   // erst nach der Landung
+    this.el.jump.classList.remove('hide');
     this.state = 'bus';
     this.cam.x = this.bus.x; this.cam.y = this.bus.y;
     this.toast('SPRINGEN!', 1.4);
@@ -329,6 +349,7 @@ const Game = {
 
   updateBus(dt) {
     this.busT += dt;
+    this.lookWhileFalling(dt);
     const travelled = this.advanceBus(dt);
     this.cam.x = this.bus.x; this.cam.y = this.bus.y;
 
@@ -342,12 +363,26 @@ const Game = {
       p.drop.ty = clamp(p.y + Input.move.y * 900, 60, MAP - 60);
     } else { p.drop.tx = p.x + Math.cos(this.bus.ang) * 420; p.drop.ty = p.y + Math.sin(this.bus.ang) * 420; }
 
-    if (Input.tap('fire') || Input.tap('use') || this.busT > 5.5 || travelled > 0.92) {
+    if (Input.tap('jump') || Input.tap('fire') || Input.tap('use') || this.busT > 8 || travelled > 0.92) {
       p.drop.phase = 'fall'; p.drop.h = 1;
       this.state = 'drop';
+      this.el.jump.classList.add('hide');
       Snd.play('jump', 1);
       this.toast('LINKS ZIEHEN ZUM STEUERN', 1.6);
+      setTimeout(() => Input.cache(), 30);
     }
+  },
+
+  /** Umschauen im Bus und im Fall — sonst staut sich die Wischeingabe an
+      und die Sicht springt im Moment der Landung schlagartig weg. */
+  lookWhileFalling(dt) {
+    if (!this.v3) return;
+    const p = this.player;
+    const look = Input.lookDelta();
+    const sens = 0.0042 * (this.opts.sens || 1);
+    p.aimAng += look.dx * sens;
+    p.pitch = clamp((p.pitch || 0) - look.dy * sens, -0.5, 0.5);
+    if (p.aimAng > Math.PI) p.aimAng -= TAU; else if (p.aimAng < -Math.PI) p.aimAng += TAU;
   },
 
   updateDrop(a, dt) {
@@ -376,6 +411,10 @@ const Game = {
     a.x = clamp(a.x + ax * sp * dt, 40, MAP - 40);
     a.y = clamp(a.y + ay * sp * dt, 40, MAP - 40);
     if ((ax || ay) && !(a === this.player && Game.v3)) { a.ang = Math.atan2(ay, ax); a.aimAng = a.ang; }
+    if (a === this.player) {
+      const m = Math.round(d.h * 60 + 1);
+      this.el.alt.textContent = d.phase === 'bus' ? '' : m + ' m';
+    }
     if (d.h <= 0) {
       d.h = 0; d.phase = 'ground';
       const pos = World.collide(a.x, a.y, a.r);
@@ -383,8 +422,12 @@ const Game = {
       a.state = a.isBot ? 'loot' : 'play';
       if (a === this.player) {
         this.state = 'play';
+        this.el.alt.textContent = '';
+        this.el.jump.classList.add('hide');
+        document.getElementById('cross').classList.toggle('hide', !this.v3);
         Snd.play('pickup', .8);
         this.toast('LOS GEHT\'S — SAMMEL WAFFEN!', 1.8);
+        setTimeout(() => Input.cache(), 30);
       }
     }
   },
@@ -441,7 +484,7 @@ const Game = {
   updatePlayer(dt) {
     const p = this.player;
     if (!p.alive) return;
-    if (p.drop.phase !== 'ground') { this.updateDrop(p, dt); this.camFollow(dt); return; }
+    if (p.drop.phase !== 'ground') { this.lookWhileFalling(dt); this.updateDrop(p, dt); this.camFollow(dt); return; }
 
     Input.desktop(this.canvas, this.W / 2, this.H / 2);
     if (p.fireT > 0) p.fireT -= dt;

@@ -196,6 +196,16 @@ const Input = {
     }
   },
 
+  /** Bildschirm- -> Buehnenkoordinaten.
+      rot 1 = Buehne um +90° gedreht (Oberkante zeigt nach rechts),
+      rot 2 = um -90° (Oberkante nach links). */
+  toStage(x, y) {
+    if (this.rot === 1) return { x: y, y: innerWidth - x };
+    if (this.rot === 2) return { x: innerHeight - y, y: x };
+    return { x, y };
+  },
+  stageW() { return this.rot ? innerHeight : innerWidth; },
+
   hitBtn(x, y) {
     let best = null, bd = 1e9;
     for (const b of this.rects) {
@@ -222,12 +232,13 @@ const Input = {
       const act = this.hitBtn(t.clientX, t.clientY);
       if (act) { this.touchAct = this.touchAct || {}; this.touchAct[t.identifier] = act; this.press(act); continue; }
       // otherwise it's a stick: left half moves, right half aims (swapped for lefties)
-      const leftSide = t.clientX < innerWidth * 0.5;
+      const s = this.toStage(t.clientX, t.clientY);
+      const leftSide = s.x < this.stageW() * 0.5;
       const stick = (leftSide !== this.leftHanded) ? this.move : this.aim;
       if (stick.id !== null) continue;
       stick.id = t.identifier; stick.active = true;
-      stick.ox = stick.cx = t.clientX; stick.oy = stick.cy = t.clientY;
-      stick.px = t.clientX; stick.py = t.clientY;      // fuer das Blick-Delta
+      stick.ox = stick.cx = s.x; stick.oy = stick.cy = s.y;
+      stick.px = s.x; stick.py = s.y;                  // fuer das Blick-Delta
       stick.x = stick.y = stick.mag = 0;
     }
   },
@@ -237,7 +248,8 @@ const Input = {
     for (const t of e.changedTouches) {
       for (const s of [this.move, this.aim]) {
         if (s.id !== t.identifier) continue;
-        let dx = t.clientX - s.ox, dy = t.clientY - s.oy;
+        const q = this.toStage(t.clientX, t.clientY);
+        let dx = q.x - s.ox, dy = q.y - s.oy;
         const d = Math.hypot(dx, dy);
         if (d > this.R) {                    // drag the origin along so the stick never sticks at the rim
           s.ox += dx * (1 - this.R / d);
@@ -246,10 +258,10 @@ const Input = {
         }
         // Ego-Perspektive dreht sich um die Fingerbewegung, nicht um die
         // Auslenkung: gezogen wird wie mit einer Maus, nicht wie an einem Stick.
-        s.dxA = (s.dxA || 0) + (t.clientX - (s.px === undefined ? t.clientX : s.px));
-        s.dyA = (s.dyA || 0) + (t.clientY - (s.py === undefined ? t.clientY : s.py));
-        s.px = t.clientX; s.py = t.clientY;
-        s.cx = t.clientX; s.cy = t.clientY;
+        s.dxA = (s.dxA || 0) + (q.x - (s.px === undefined ? q.x : s.px));
+        s.dyA = (s.dyA || 0) + (q.y - (s.py === undefined ? q.y : s.py));
+        s.px = q.x; s.py = q.y;
+        s.cx = q.x; s.cy = q.y;
         const m = Math.min(1, Math.hypot(dx, dy) / this.R);
         if (m < this.DEAD) { s.x = s.y = 0; s.mag = 0; }
         else {
