@@ -38,3 +38,18 @@ fs.mkdirSync(path.join(ROOT, 'dist'), { recursive: true });
 const out = path.join(ROOT, 'dist', 'schotter-royale.html');
 fs.writeFileSync(out, html);
 console.log('geschrieben:', out, (fs.statSync(out).size / 1024).toFixed(0) + ' KB');
+
+/* Das PWA-Paket gleich mitziehen. Vorher lag es getrennt und war nach einer
+   Quelltextaenderung stillschweigend veraltet. */
+const { execFileSync } = require('child_process');
+const zip = path.join(ROOT, 'dist', 'schotter-royale-pwa.zip');
+const files = ['index.html', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png',
+               'manifest.webmanifest', 'sw.js', 'README.md',
+               ...fs.readdirSync(path.join(ROOT, 'js')).sort().map(f => 'js/' + f)];
+fs.rmSync(zip, { force: true });
+execFileSync('python3', ['-c', `
+import zipfile, sys
+with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+    for f in sys.argv[2:]: z.write(f)
+`, zip, ...files], { cwd: ROOT });
+console.log('geschrieben:', zip, (fs.statSync(zip).size / 1024).toFixed(0) + ' KB');
