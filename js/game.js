@@ -20,7 +20,7 @@ const Game = {
   feed: [], hintItem: null, lowFx: false,
 
   opts: {
-    bots: 100, diff: 'normal', autofire: true, aim: 2,
+    bots: 100, diff: 'normal', autofire: true, aim: 1,
     speed: 1, sound: true, hand: 0, quality: 0, view: 1, sens: 1, quer: 0, start: 1, marks: 1, tapfire: 1, autorun: 1
   },
 
@@ -544,13 +544,14 @@ const Game = {
 
       const lock = this.aimAssist(p, p.aimAng);
       if (lock) {
-        const strength = [0, 0.35, 0.7][this.opts.aim] * dt * 14;
+        // Nur ein Stupser in die richtige Richtung, kein Einrasten: das Zielen
+        // soll sich noch nach einem selbst anfuehlen.
+        const strength = [0, 0.10, 0.26][this.opts.aim] * dt * 9;
         const k = clamp(strength, 0, 1);
         p.aimAng = angApproach(p.aimAng, lock.ang, Math.abs(angDiff(p.aimAng, lock.ang)) * k);
         const dy = BODY_H * 0.58 - EYE;
-        p.pitch = lerp(p.pitch, Math.atan2(dy, Math.max(40, lock.d)), k);
-        // Grosszuegiger als vorher: 0.12 rad traf bei laufenden Zielen fast nie.
-        if (this.opts.autofire && Math.abs(angDiff(p.aimAng, lock.ang)) < 0.22) firing = true;
+        p.pitch = lerp(p.pitch, Math.atan2(dy, Math.max(40, lock.d)), k * 0.7);
+        if (this.opts.autofire && Math.abs(angDiff(p.aimAng, lock.ang)) < 0.09) firing = true;
       }
       p.ang = p.aimAng;
       this.el.cross.classList.toggle('lock', !!lock);
@@ -622,7 +623,7 @@ const Game = {
       if (d > range) continue;
       const a = Math.atan2(o.y - p.y, o.x - p.x);
       const off = Math.abs(angDiff(ang, a));
-      if (off > (this.v3 ? 0.34 : 0.42)) continue;    // Zielkegel
+      if (off > (this.v3 ? 0.22 : 0.42)) continue;    // Zielkegel
       if (World.losBlocked(p.x, p.y, o.x, o.y)) continue;
       const score = off * 300 + d;
       if (score < bs) { bs = score; best = { ang: a, actor: o, d }; }

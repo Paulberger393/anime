@@ -99,7 +99,7 @@ Bewegung *und* Kugeln und lassen sich zerschießen.
 | **Gegner** | 30 / 50 / 75 / 100 / 120 Bots |
 | **Schwierigkeit** | Leicht · Normal · Schwer · Profi (Zielgenauigkeit, Reaktion, Aggressivität, Sichtweite) |
 | **Auto-Feuer** | Schießt automatisch, wenn beim Zielen ein Gegner erfasst wird |
-| **Zielhilfe** | Aus / Normal / Stark — zieht das Fadenkreuz auf Gegner im Sichtkegel |
+| **Zielhilfe** | Aus / Normal / Stark — stupst das Fadenkreuz Richtung Gegner, ohne einzurasten |
 | **Match-Tempo** | Normal · Schnell (~3,5 Min) · Blitz — skaliert alle Sturmphasen |
 | **Sound** | An/Aus |
 | **Layout** | Rechts- oder Linkshänder (tauscht Lauf- und Zielstick) |
@@ -136,6 +136,16 @@ Die Spielwelt ist weiterhin zweidimensional — das 3D-Bild legt sie nur auf die
 Ebene: Welt-x wird 3D-x, Welt-y wird 3D-z, Höhe ist die neue 3D-y-Achse. Dadurch
 laufen Kollision, KI, Sturm, Loot und Bauen unverändert weiter; getauscht wurden
 Renderer, Kamera und Eingabe. Maßstab: 50 Einheiten sind ein Meter.
+
+Die Sonne wirft echte Schatten. Eine kartenweite Shadow-Map wäre bei 6600
+Einheiten unbrauchbar grob, deshalb folgt eine enge Ortho-Kamera von 1300
+Einheiten dem Spieler, und nur Kulissen-Chunks im Umkreis von 1500 Einheiten
+werfen überhaupt.
+
+Der Boden ist eine unterteilte Ebene mit Scheitelfarben — Wiesen, trockene
+Flecken, Trampelpfade und ein Sandsaum am Inselrand. Wald gibt es in drei Arten
+(Laubbaum, Fichte, abgestorbener Stamm), Häuser haben Dächer und fünf
+Wandfarben, aus der Position abgeleitet, damit sie über Neustarts stabil bleiben.
 
 Figuren bestehen aus einem kleinen Skelett — Kopf mit Mütze, Brustkorb, Hüfte,
 Rucksack, acht Gliedmaßensegmente mit Schrittzyklus, Hände und Stiefel. Jedes

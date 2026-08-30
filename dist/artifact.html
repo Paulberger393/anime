@@ -283,7 +283,7 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
     <button class="opt" data-opt="bots">Gegner: <b>100</b></button>
     <button class="opt" data-opt="diff">Schwierigkeit: <b>Normal</b></button>
     <button class="opt" data-opt="autofire">Auto-Feuer: <b>An</b></button>
-    <button class="opt" data-opt="aim">Zielhilfe: <b>Stark</b></button>
+    <button class="opt" data-opt="aim">Zielhilfe: <b>Normal</b></button>
     <button class="opt" data-opt="speed">Match-Tempo: <b>Schnell</b></button>
     <button class="opt" data-opt="sound">Sound: <b>An</b></button>
     <button class="opt" data-opt="hand">Layout: <b>Rechts</b></button>
@@ -1627,6 +1627,9 @@ const R3D = {
     this.ren = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
     this.ren.setClearColor(0x8fb6d8);
     this.ren.outputEncoding = THREE.sRGBEncoding;
+    this.ren.shadowMap.enabled = true;
+    this.ren.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.ren.shadowMap.autoUpdate = true;
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0xa6c6e0, 600, 3500);
 
@@ -1634,8 +1637,22 @@ const R3D = {
     this.cam.rotation.order = 'YXZ';
 
     // Licht: eine Sonne für Plastizität, Himmelslicht gegen tote schwarze Flächen
-    const sun = new THREE.DirectionalLight(0xfff0cf, 0.95);
+    const sun = new THREE.DirectionalLight(0xfff0cf, 1.05);
     sun.position.set(-0.5, 0.85, 0.28);
+    sun.castShadow = true;
+    // Enger Ausschnitt um den Spieler: 1300 Einheiten sind 26 m, das reicht
+    // fuer alles, was man als Schatten wahrnimmt, und haelt die Karte scharf.
+    const SH = 1300;
+    sun.shadow.camera.left = -SH; sun.shadow.camera.right = SH;
+    sun.shadow.camera.top = SH; sun.shadow.camera.bottom = -SH;
+    sun.shadow.camera.near = 100; sun.shadow.camera.far = 5200;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.bias = -0.0012;
+    sun.shadow.normalBias = 2.5;
+    this.sun = sun;
+    this.sunTarget = new THREE.Object3D();
+    this.scene.add(this.sunTarget);
+    sun.target = this.sunTarget;
     this.scene.add(sun);
     this.scene.add(new THREE.HemisphereLight(0xa8ccf5, 0x3e5230, 0.48));
 
@@ -1706,9 +1723,37 @@ const R3D = {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(MAP / 220, MAP / 220);
     tex.anisotropy = 4;
-    const geo = new THREE.PlaneGeometry(MAP, MAP);
+    // Unterteilte Ebene mit Scheitelfarben: Wiesen, Trampelpfade, Sand am Rand.
+    // Eine einzelne Textur ueber 6600 Einheiten sieht aus wie Filz.
+    const geo = new THREE.PlaneGeometry(MAP, MAP, 72, 72);
     geo.rotateX(-Math.PI / 2);
-    const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex }));
+    const pos = geo.attributes.position;
+    const cols = new Float32Array(pos.count * 3);
+    const RN = mulberry32(23);
+    const nz = [];
+    for (let i = 0; i < 96; i++) nz.push({ x: RN() * MAP, y: RN() * MAP, r: 300 + RN() * 900, t: RN() });
+    const C = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const wx = pos.getX(i) + MAP / 2, wz = pos.getZ(i) + MAP / 2;
+      let dirt = 0, dry = 0;
+      for (const n of nz) {
+        const d = Math.hypot(wx - n.x, wz - n.y);
+        if (d < n.r) { const f = 1 - d / n.r; if (n.t < 0.45) dirt = Math.max(dirt, f); else dry = Math.max(dry, f); }
+      }
+      const edge = Math.min(wx, wz, MAP - wx, MAP - wz);
+      const sand = clamp(1 - edge / 340, 0, 1);          // Sandsaum am Inselrand
+      // Scheitelfarben werden mit der Textur multipliziert: Werte ueber 1.0
+      // hellen auf, bis der Boden weiss ausbrennt. Deshalb hoechstens 1.0 —
+      // sie toenen, sie leuchten nicht.
+      C.setRGB(1.0, 1.0, 0.98);
+      C.lerp(this._dry || (this._dry = new THREE.Color(0.98, 0.90, 0.62)), dry * 0.6);
+      C.lerp(this._dirt || (this._dirt = new THREE.Color(0.78, 0.64, 0.46)), dirt * 0.75);
+      C.lerp(this._sand || (this._sand = new THREE.Color(1.0, 0.94, 0.74)), sand);
+      cols[i * 3] = C.r; cols[i * 3 + 1] = C.g; cols[i * 3 + 2] = C.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex, vertexColors: true }));
+    m.receiveShadow = true;
     m.position.set(MAP / 2, 0, MAP / 2);
     this.scene.add(m);
     this.ground = m;
@@ -1725,13 +1770,16 @@ const R3D = {
     const box = new THREE.BoxGeometry(1, 1, 1);
     const trunk = new THREE.CylinderGeometry(1, 1.25, 1, 6);
     const leaf = new THREE.IcosahedronGeometry(1, 0);
+    const pine = new THREE.ConeGeometry(1, 1, 7);
     const rock = new THREE.DodecahedronGeometry(1, 0);
     const blob = new THREE.CircleGeometry(1, 10); blob.rotateX(-Math.PI / 2);
-    const geos = { box, trunk, leaf, rock, blob };
+    const geos = { box, roof: box, trunk, leaf, pine, rock, blob };
     const mats = {
       box:   new THREE.MeshLambertMaterial({ color: 0xffffff }),   // Farbe je Instanz
+      roof:  new THREE.MeshLambertMaterial({ color: 0xffffff }),
       trunk: new THREE.MeshLambertMaterial({ color: 0x6b4c2a }),
       leaf:  new THREE.MeshLambertMaterial({ color: 0x3f7a3c, flatShading: true }),
+      pine:  new THREE.MeshLambertMaterial({ color: 0x2f6b41, flatShading: true }),
       rock:  new THREE.MeshLambertMaterial({ color: 0x8b8d92, flatShading: true }),
 
       // Kein Schattenwurf per Shadow-Map: 100 Figuren plus Wald waeren dem
@@ -1746,12 +1794,25 @@ const R3D = {
     const put = (x, z, type, item) => {
       const k = key(x, z);
       let b = bins.get(k);
-      if (!b) { b = { box: [], trunk: [], leaf: [], rock: [], blob: [] }; bins.set(k, b); }
+      if (!b) { b = { box: [], roof: [], trunk: [], leaf: [], pine: [], rock: [], blob: [] }; bins.set(k, b); }
       b[type].push(item);
     };
-    for (const o of World.obstacles) { o.kind = o.solid ? 'wall' : 'floor'; put(o.x + o.w / 2, o.y + o.h / 2, 'box', o); }
+    for (const o of World.obstacles) {
+      o.kind = o.solid ? 'wall' : 'floor';
+      put(o.x + o.w / 2, o.y + o.h / 2, 'box', o);
+      // Der Grundriss traegt auch das Dach — ohne wirken die POIs wie
+      // hingestellte Mauerreste statt wie Haeuser.
+      if (!o.solid) put(o.x + o.w / 2, o.y + o.h / 2, 'roof', o);
+    }
     for (const p of World.props) {
-      if (p.type === 'tree') { put(p.x, p.y, 'trunk', p); put(p.x, p.y, 'leaf', p); }
+      if (p.type === 'tree') {
+        // Art aus der Position ableiten, damit sie ueber Neustarts stabil bleibt
+        const h = Math.abs(Math.sin(p.x * 0.017 + p.y * 0.031));
+        p.kind = h < 0.42 ? 'broad' : h < 0.82 ? 'pine' : 'dead';
+        put(p.x, p.y, 'trunk', p);
+        if (p.kind === 'broad') put(p.x, p.y, 'leaf', p);
+        else if (p.kind === 'pine') { put(p.x, p.y, 'pine', p); put(p.x, p.y, 'pine', p); }
+      }
       else if (p.type === 'rock') put(p.x, p.y, 'rock', p);
       else { p.kind = 'crate'; put(p.x, p.y, 'box', p); }
       put(p.x, p.y, 'blob', p);
@@ -1768,6 +1829,7 @@ const R3D = {
         if (!items.length) continue;
         const mesh = new THREE.InstancedMesh(geos[type], mats[type], items.length);
         mesh.frustumCulled = false;
+        mesh.receiveShadow = true;
         for (let i = 0; i < items.length; i++) {
           const o = items[i];
           if (type === 'box') {
@@ -1776,9 +1838,21 @@ const R3D = {
             else                         { const r = o.r * .8; P.set(o.x, r, o.y); S.set(r * 2, r * 2, r * 2);
                                            E.set(0, (o.x % 7) * .2, 0); Q.setFromEuler(E); }
           }
-          else if (type === 'trunk'){ const h = 150 * o.s; P.set(o.x, h / 2, o.y); S.set(9, h, 9); Q.identity(); }
+          else if (type === 'roof') {
+            P.set(o.x + o.w / 2, WALL_H + 7, o.y + o.h / 2);
+            S.set(o.w + 18, 14, o.h + 18); Q.identity();
+          }
+          else if (type === 'trunk'){ const h = (o.kind === 'pine' ? 175 : o.kind === 'dead' ? 195 : 150) * o.s;
+                                      P.set(o.x, h / 2, o.y); S.set(o.kind === 'dead' ? 7 : 9, h, o.kind === 'dead' ? 7 : 9);
+                                      Q.identity(); }
           else if (type === 'leaf') { const h = 150 * o.s; P.set(o.x, h + 34 * o.s, o.y); const r = 58 * o.s; S.set(r, r * .78, r);
                                       E.set(o.sway, o.sway * 1.7, 0); Q.setFromEuler(E); }
+          else if (type === 'pine') { const h = 175 * o.s;
+                                      // zwei gestapelte Kegel je Fichte
+                                      const lvl = (i % 2);
+                                      const r = (lvl ? 40 : 56) * o.s;
+                                      P.set(o.x, h * (lvl ? 0.98 : 0.72) + 20 * o.s, o.y);
+                                      S.set(r, 90 * o.s * (lvl ? 0.85 : 1), r); Q.identity(); }
           else if (type === 'rock') { const r = o.r * .62; P.set(o.x, r * .72, o.y); S.set(r * 1.5, r * 1.35, r * 1.5);
                                       E.set(0.3, o.x % 3, 0.2); Q.setFromEuler(E); }
           else                      { const r = (o.type === 'tree' ? 46 * o.s : o.r * 1.1);
@@ -1786,21 +1860,28 @@ const R3D = {
           M.compose(P, Q, S);
           mesh.setMatrixAt(i, M);
         }
-        if (type === 'box') {
+        if (type === 'box' || type === 'roof') {
           const C = new THREE.Color();
+          // Farbe aus der Position ableiten: gleiche Haeuser sehen sonst aus
+          // wie kopiert, und die Farbe muss ueber Neustarts stabil bleiben.
+          const WALLS = [0xbcb5a4, 0xa89c86, 0xc9c3b2, 0x9a9384, 0xcbbfa6];
+          const ROOFS = [0x8d4a3c, 0x6b4230, 0x4a5566, 0x7a5c34, 0x53504a];
           for (let i = 0; i < items.length; i++) {
             const o = items[i];
-            C.set(o.kind === 'wall' ? 0xa8a294 : o.kind === 'floor' ? 0x5f584d : 0x8d6a3a);
+            const h = Math.abs(Math.round(o.x * 0.031 + o.y * 0.017)) % 5;
+            if (type === 'roof') C.set(ROOFS[h]);
+            else C.set(o.kind === 'wall' ? WALLS[h] : o.kind === 'floor' ? 0x5f584d : 0x8d6a3a);
             mesh.setColorAt(i, C);
           }
           mesh.instanceColor.needsUpdate = true;
-        } else if (type === 'leaf' || type === 'rock' || type === 'trunk') {
+        } else if (type === 'leaf' || type === 'pine' || type === 'rock' || type === 'trunk') {
           const C = new THREE.Color();
           for (let i = 0; i < items.length; i++) {
             const o = items[i];
             const j = (Math.sin(o.x * 12.9898 + o.y * 78.233) * 43758.5453) % 1;
             const t = (j < 0 ? j + 1 : j);
             if (type === 'leaf') C.setHSL(0.26 + t * 0.055, 0.42 + t * 0.16, 0.26 + t * 0.14);
+            else if (type === 'pine') C.setHSL(0.34 + t * 0.04, 0.40 + t * 0.14, 0.20 + t * 0.10);
             else if (type === 'trunk') C.setHSL(0.08, 0.34, 0.22 + t * 0.09);
             else C.setHSL(0.09, 0.05, 0.44 + t * 0.18);
             mesh.setColorAt(i, C);
@@ -1858,6 +1939,7 @@ const R3D = {
       const m = this.dyn[k];
       m.frustumCulled = false;
       m.count = 0;
+      if (k !== 'shadow' && k !== 'spark') { m.castShadow = true; m.receiveShadow = true; }
       if (k !== 'shadow') {
         const n = m.instanceMatrix.count;
         m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3);
@@ -2026,6 +2108,9 @@ Object.assign(R3D, {
     this.updateTracers();
     this.updateSparks(dt);
 
+    // Sonne mitfuehren, sonst laeuft man aus dem Schattenausschnitt heraus
+    this.sunTarget.position.set(p.x, 0, p.y);
+    this.sun.position.set(p.x - 900, 1530, p.y + 500);
     this.sky.position.copy(this.cam.position);
     this.ground.position.set(MAP / 2, 0, MAP / 2);
     this.ren.render(this.scene, this.cam);
@@ -2047,7 +2132,8 @@ Object.assign(R3D, {
         const d = Math.sqrt(d2);
         vis = (dx * dx0 + dz * dz0) / d > -0.30;   // grosszuegiger Kegel gegen Aufpoppen
       }
-      for (let i = 0; i < list.length; i++) list[i].visible = vis;
+      const casts = d2 < 1500 * 1500;
+      for (let i = 0; i < list.length; i++) { list[i].visible = vis; list[i].castShadow = casts; }
     }
   },
 
@@ -2440,7 +2526,7 @@ const Game = {
   feed: [], hintItem: null, lowFx: false,
 
   opts: {
-    bots: 100, diff: 'normal', autofire: true, aim: 2,
+    bots: 100, diff: 'normal', autofire: true, aim: 1,
     speed: 1, sound: true, hand: 0, quality: 0, view: 1, sens: 1, quer: 0, start: 1, marks: 1, tapfire: 1, autorun: 1
   },
 
@@ -2964,13 +3050,14 @@ const Game = {
 
       const lock = this.aimAssist(p, p.aimAng);
       if (lock) {
-        const strength = [0, 0.35, 0.7][this.opts.aim] * dt * 14;
+        // Nur ein Stupser in die richtige Richtung, kein Einrasten: das Zielen
+        // soll sich noch nach einem selbst anfuehlen.
+        const strength = [0, 0.10, 0.26][this.opts.aim] * dt * 9;
         const k = clamp(strength, 0, 1);
         p.aimAng = angApproach(p.aimAng, lock.ang, Math.abs(angDiff(p.aimAng, lock.ang)) * k);
         const dy = BODY_H * 0.58 - EYE;
-        p.pitch = lerp(p.pitch, Math.atan2(dy, Math.max(40, lock.d)), k);
-        // Grosszuegiger als vorher: 0.12 rad traf bei laufenden Zielen fast nie.
-        if (this.opts.autofire && Math.abs(angDiff(p.aimAng, lock.ang)) < 0.22) firing = true;
+        p.pitch = lerp(p.pitch, Math.atan2(dy, Math.max(40, lock.d)), k * 0.7);
+        if (this.opts.autofire && Math.abs(angDiff(p.aimAng, lock.ang)) < 0.09) firing = true;
       }
       p.ang = p.aimAng;
       this.el.cross.classList.toggle('lock', !!lock);
@@ -3042,7 +3129,7 @@ const Game = {
       if (d > range) continue;
       const a = Math.atan2(o.y - p.y, o.x - p.x);
       const off = Math.abs(angDiff(ang, a));
-      if (off > (this.v3 ? 0.34 : 0.42)) continue;    // Zielkegel
+      if (off > (this.v3 ? 0.22 : 0.42)) continue;    // Zielkegel
       if (World.losBlocked(p.x, p.y, o.x, o.y)) continue;
       const score = off * 300 + d;
       if (score < bs) { bs = score; best = { ang: a, actor: o, d }; }
