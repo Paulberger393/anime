@@ -137,6 +137,19 @@ Ebene: Welt-x wird 3D-x, Welt-y wird 3D-z, Höhe ist die neue 3D-y-Achse. Dadurc
 laufen Kollision, KI, Sturm, Loot und Bauen unverändert weiter; getauscht wurden
 Renderer, Kamera und Eingabe. Maßstab: 50 Einheiten sind ein Meter.
 
+Figuren bestehen aus einem kleinen Skelett — Kopf mit Mütze, Brustkorb, Hüfte,
+Rucksack, acht Gliedmaßensegmente mit Schrittzyklus, Hände und Stiefel. Jedes
+Körperteil ist ein InstancedMesh, also je ein Zeichenaufruf für alle Figuren
+zusammen. Bewaffnete greifen mit beiden Armen nach vorn an die Waffe,
+Unbewaffnete lassen die Arme gegenläufig zu den Beinen pendeln.
+
+Waffen gibt es als richtige Modelle aus Verschluss, Lauf und Magazin, deren Maße
+je Typ variieren — langer dünner Lauf beim Scharfschützengewehr, kurz und dick
+bei der Schrotflinte. Dieselben Meshes tragen die Waffe in der Hand und die am
+Boden liegende, damit ein Gewehr überall gleich aussieht. Die Waffe am unteren
+Bildrand skaliert nach denselben Maßen und färbt ihren Verschluss in der
+Seltenheitsfarbe.
+
 In der Ego-Sicht zeigen Marker über sichtbaren Gegnern Namen, Lebensbalken und
 Entfernung — ohne die findet man auf einer 6600 Einheiten großen Insel schlicht
 niemanden. Die Zielhilfe korrigiert Drehung *und* Neigung, ein Treffer blitzt am

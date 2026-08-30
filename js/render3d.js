@@ -17,6 +17,19 @@ const WALL_H = 170;                 // Höhe der Hauswände
 const BUILT_H = 150;                // Höhe gebauter Wände
 const CHUNK = 1100;                 // Kantenlänge eines Kulissen-Chunks
 
+/* Masse der Waffenmodelle in Welteinheiten (50 = 1 m). Die Silhouette soll
+   den Typ auf Distanz verraten: langer duenner Lauf = Scharfschuetze,
+   kurz und dick = Schrotflinte. */
+const GUN_SHAPE = {
+  pistol:  { body: [11, 5.0, 3.6], barrel: [0.9,  5], mag: [2.6, 6, 2.6], grip: 0.55 },
+  smg:     { body: [15, 5.2, 3.8], barrel: [0.9,  7], mag: [2.8, 9, 2.8], grip: 0.5 },
+  tac:     { body: [18, 5.2, 3.8], barrel: [0.9,  9], mag: [2.8, 9, 2.8], grip: 0.5 },
+  ar:      { body: [21, 5.4, 4.0], barrel: [1.0, 13], mag: [3.2, 10, 3.0], grip: 0.5 },
+  shotgun: { body: [23, 6.0, 4.6], barrel: [1.6, 17], mag: [3.6, 4, 3.4], grip: 0.5 },
+  sniper:  { body: [25, 5.2, 4.0], barrel: [1.15, 21], mag: [2.8, 5, 2.8], grip: 0.5, scope: true },
+  rpg:     { body: [28, 7.0, 7.0], barrel: [3.0, 18], mag: [4.5, 5, 4.5], grip: 0.5 }
+};
+
 const R3D = {
   ok: false, scene: null, cam: null, ren: null,
   chunks: new Map(), dyn: {}, fx: [], tracers: [],
@@ -224,18 +237,33 @@ const R3D = {
     const MAXA = 130, MAXL = 700, MAXB = 900;
     const lam = (c, o) => new THREE.MeshLambertMaterial(Object.assign({ color: c }, o || {}));
 
-    // Figuren: Rumpf, Kopf, Waffe und ein weicher Bodenschatten
-    this.dyn.body = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXA);
-    this.dyn.head = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXA);
-    this.dyn.gun  = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0x2b2f38), MAXA);
-    this.dyn.arm  = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXA * 2);
-    this.dyn.leg  = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0x39435c), MAXA * 2);
+    /* Figuren aus einem kleinen Skelett: Kopf, Brustkorb, Huefte, Rucksack,
+       acht Gliedmassen-Segmente (Ober-/Unterarm, Ober-/Unterschenkel),
+       Haende und Stiefel. Jedes Teil ist ein InstancedMesh, also je ein
+       Zeichenaufruf fuer alle Figuren zusammen. */
+    const box = () => new THREE.BoxGeometry(1, 1, 1);
+    this.dyn.torso = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA);
+    this.dyn.hips  = new THREE.InstancedMesh(box(), lam(0x39435c), MAXA);
+    this.dyn.head  = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA);
+    this.dyn.pack  = new THREE.InstancedMesh(box(), lam(0x5d6440), MAXA);
+    this.dyn.cap   = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA);
+    this.dyn.limb  = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA * 8);
+    this.dyn.hand  = new THREE.InstancedMesh(box(), lam(0xe0b189), MAXA * 2);
+    this.dyn.boot  = new THREE.InstancedMesh(box(), lam(0x2c2a26), MAXA * 2);
     const disc = new THREE.CircleGeometry(1, 12); disc.rotateX(-Math.PI / 2);
     this.dyn.shadow = new THREE.InstancedMesh(disc,
       new THREE.MeshBasicMaterial({ color: 0x101c10, transparent: true, opacity: .34, depthWrite: false }), MAXA);
 
-    // Loot schwebt und dreht sich, damit es auf Distanz auffällt
-    this.dyn.loot = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXL);
+    /* Waffen: drei Teile, deren Masse je Waffentyp variieren. Dieselben Meshes
+       tragen sowohl die Waffe in der Hand als auch die am Boden liegende —
+       ein Gewehr sieht dadurch ueberall gleich aus. */
+    this.dyn.gunBody = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA + 260);
+    this.dyn.gunBarrel = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 6), lam(0x23262c), MAXA + 260);
+    this.dyn.gunMag  = new THREE.InstancedMesh(box(), lam(0x2a2e35), MAXA + 260);
+
+    // Uebrige Beute: Munitionskisten und Flaschen liegen ebenfalls am Boden
+    this.dyn.loot = new THREE.InstancedMesh(box(), lam(0xffffff), MAXL);
+    this.dyn.bottle = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), lam(0xffffff), MAXL);
     this.dyn.chest = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xd9a13a), 120);
     // gebaute Wände
     this.dyn.built = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXB);
@@ -289,49 +317,91 @@ const R3D = {
     this.scene.add(this.storm);
   },
 
-  /** Waffe am unteren Bildrand — verkauft die Ego-Perspektive.
-      Schlank und weit aussen: der erste Entwurf war ein 68 cm langer Klotz
-      mitten im Bild und hat ein Drittel der Sicht verdeckt. */
+  /** Waffe am unteren Bildrand. Die Teile werden nach denselben Massen
+      skaliert wie die Weltmodelle, damit die Waffe in der Hand aussieht wie
+      die, die man aufgehoben hat — Scharfschuetze lang mit Zielfernrohr,
+      Schrotflinte kurz und dick. */
   buildViewModel() {
     const g = new THREE.Group();
-    const dark = new THREE.MeshLambertMaterial({ color: 0x2e343d });
-    const grey = new THREE.MeshLambertMaterial({ color: 0x454c57 });
+    const dark = new THREE.MeshLambertMaterial({ color: 0x2a2f37 });
+    const body = new THREE.MeshLambertMaterial({ color: 0x525a66 });
     const wood = new THREE.MeshLambertMaterial({ color: 0x54402a });
+    const V = this.vmParts = {};
 
-    const receiver = new THREE.Mesh(new THREE.BoxGeometry(4.6, 5.4, 19), grey);
-    receiver.position.set(0, 0, -9);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 17, 6), dark);
-    barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 1.3, -25);
-    const sight = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.4, 1.6), dark);
-    sight.position.set(0, 3.9, -17);
-    const mag = new THREE.Mesh(new THREE.BoxGeometry(3.4, 8.5, 5), dark);
-    mag.position.set(0, -5.4, -8); mag.rotation.x = 0.14;
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(3.8, 9, 4.4), wood);
-    grip.position.set(0, -5.6, 1); grip.rotation.x = -0.30;
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(3.8, 5.2, 9), wood);
-    stock.position.set(0, -1.2, 5);
-    g.add(receiver, barrel, sight, mag, grip, stock);
+    V.receiver = new THREE.Mesh(new THREE.BoxGeometry(4.4, 5.2, 20), body);
+    V.receiver.position.set(0, 0, -10);
+    V.barrel = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 16, 8), dark);
+    V.barrel.rotation.x = Math.PI / 2;
+    V.mag = new THREE.Mesh(new THREE.BoxGeometry(3.2, 9, 4.6), dark);
+    V.mag.position.set(0, -5.6, -8); V.mag.rotation.x = 0.16;
+    V.grip = new THREE.Mesh(new THREE.BoxGeometry(3.6, 9, 4.2), wood);
+    V.grip.position.set(0, -5.8, 1.5); V.grip.rotation.x = -0.32;
+    V.stock = new THREE.Mesh(new THREE.BoxGeometry(3.6, 5, 9), wood);
+    V.stock.position.set(0, -1.4, 6);
+    V.scope = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 9, 8), dark);
+    V.scope.rotation.x = Math.PI / 2; V.scope.position.set(0, 4.4, -12);
+    V.scope.visible = false;
+    V.sight = new THREE.Mesh(new THREE.BoxGeometry(1, 2.2, 1.4), dark);
+    V.sight.position.set(0, 3.6, -17);
+    for (const k in V) g.add(V[k]);
 
-    // Massstab und Sitz sind gemessen, nicht geraten: das Modell soll rund ein
-    // Viertel der Bildhoehe fuellen und in der unteren rechten Ecke sitzen.
-    g.position.set(12, -10.5, -26);
-    g.rotation.set(0.03, -0.11, 0.06);      // leicht eingedreht, wie gehalten
-    g.scale.setScalar(0.62);
+    g.position.set(12.5, -10.5, -26);
+    g.rotation.set(0.03, -0.11, 0.06);
+    g.scale.setScalar(0.55);
     this.vm = g;
-    this.vmBase = { x: 12, y: -10.5, z: -26 };
+    this.vmBase = { x: 12.5, y: -10.5, z: -26 };
 
-    this.flash = new THREE.Mesh(new THREE.IcosahedronGeometry(3.4, 0),
+    this.flash = new THREE.Mesh(new THREE.IcosahedronGeometry(3.6, 0),
       new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0, fog: false }));
-    this.flash.position.set(0, 1.3, -34);
     g.add(this.flash);
     this.muzzleLight = new THREE.PointLight(0xffd9a0, 0, 460, 2);
-    this.muzzleLight.position.set(0, 3, -30);
     g.add(this.muzzleLight);
+    this.applyViewWeapon(null);
     this.cam.add(g);
     this.scene.add(this.cam);
   },
 
-  /** Weltpunkt -> Buehnen-Pixel. null, wenn hinter der Kamera. */
+  /** Teile auf den aktuellen Waffentyp umskalieren (nur bei Wechsel) */
+  applyViewWeapon(gun) {
+    const key = gun ? gun.id + ':' + gun.rar : 'none';
+    if (key === this.vmKey) return;
+    this.vmKey = key;
+    const V = this.vmParts;
+    if (!gun) {                                  // ohne Waffe: nur die Faust
+      for (const k in V) V[k].visible = false;
+      V.grip.visible = true;
+      this.flash.position.set(0, 0, -8);
+      this.muzzleLight.position.set(0, 0, -8);
+      return;
+    }
+    const S = GUN_SHAPE[gun.id] || GUN_SHAPE.ar;
+    for (const k in V) V[k].visible = true;
+    V.scope.visible = !!S.scope;
+
+    const bl = S.body[0], bh = S.body[1], bd = S.body[2];
+    V.receiver.scale.set(bd / 4.0, bh / 5.4, bl / 20);
+    V.receiver.position.set(0, 0, -bl / 2);
+    V.barrel.scale.set(S.barrel[0] / 1.0, S.barrel[1] / 16, S.barrel[0] / 1.0);
+    V.barrel.position.set(0, bh * 0.16, -bl - S.barrel[1] / 2);
+    V.mag.scale.set(S.mag[0] / 3.2, S.mag[1] / 9, S.mag[2] / 4.6);
+    V.mag.position.set(0, -bh * 0.5 - S.mag[1] * 0.42, -bl * 0.45);
+    V.grip.position.set(0, -bh * 0.55 - 4, -bl * 0.08);
+    V.stock.position.set(0, -1.4, 4.5);
+    V.stock.visible = gun.id !== 'pistol';
+    V.sight.position.set(0, bh * 0.62 + 1, -bl * 0.85);
+    V.scope.position.set(0, bh * 0.62 + 2.4, -bl * 0.6);
+
+    // Verschluss in Seltenheitsfarbe einfaerben — man sieht, was man traegt
+    const c = new THREE.Color(RARITY[gun.rar] ? RARITY[gun.rar].col : '#8a8f98');
+    V.receiver.material = V.receiver.material.clone();
+    V.receiver.material.color.copy(c).multiplyScalar(0.5).addScalar(0.14);
+
+    const muz = -bl - S.barrel[1] - 2;
+    this.flash.position.set(0, bh * 0.16, muz);
+    this.muzzleLight.position.set(0, bh * 0.3, muz + 4);
+  },
+
+  /** Weltpunkt -> Buehnen-Pixel  /** Weltpunkt -> Buehnen-Pixel. null, wenn hinter der Kamera. */
   project(x, h, z, out) {
     const v = this._pv || (this._pv = new THREE.Vector3());
     v.set(x, h, z).project(this.cam);
@@ -427,6 +497,7 @@ Object.assign(R3D, {
 
     // Waffe folgt der Kamera verzögert (Trägheit) und zuckt beim Schuss
     const g = p.gun;
+    this.applyViewWeapon(g);
     this.vm.visible = !air && p.alive && Game.state === 'play';
     const kick = p.muzzle > 0 ? 1 : 0;
     this.vmKick = lerp(this.vmKick || 0, kick, dt * (kick ? 40 : 9));
@@ -435,118 +506,232 @@ Object.assign(R3D, {
                          vb.y + (walking ? Math.cos(this.bobT * 2) * .8 : 0) - this.vmKick * 1.1,
                          vb.z + this.vmKick * 4);
     this.vm.rotation.set(0.03 + this.vmKick * 0.17, -0.09, 0.05);
-    this.vm.scale.setScalar(g ? 0.62 : 0.4);
+    this.vm.scale.setScalar(g ? 0.55 : 0.42);
     this.flash.material.opacity = p.muzzle > 0 ? 0.95 : 0;
     this.flash.scale.setScalar(p.muzzle > 0 ? rnd(0.7, 1.4) : 1);
     this.muzzleLight.intensity = p.muzzle > 0 ? 4.2 : 0;
   },
 
+  /** Setzt einen Quader zwischen zwei Punkte — die Grundoperation fuer jedes
+      Gliedmassen-Segment. Ohne sie muesste jeder Arm von Hand rotiert werden. */
+  seg(mesh, i, ax, ay, az, bx, by, bz, thick, col) {
+    const A = this._a || (this._a = new THREE.Vector3());
+    const B = this._b || (this._b = new THREE.Vector3());
+    const D = this._d || (this._d = new THREE.Vector3());
+    const UP = this._up || (this._up = new THREE.Vector3(0, 1, 0));
+    A.set(ax, ay, az); B.set(bx, by, bz);
+    D.subVectors(B, A);
+    const len = D.length() || 0.001;
+    D.divideScalar(len);
+    this.quat.setFromUnitVectors(UP, D);
+    this.v3.set((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2);
+    this.sc.set(thick, len, thick);
+    this.mat4.compose(this.v3, this.quat, this.sc);
+    mesh.setMatrixAt(i, this.mat4);
+    if (col && mesh.instanceColor) mesh.setColorAt(i, col);
+  },
+
+  /** Quader mit eigener Ausrichtung (Rumpf, Kopf, Rucksack, Waffenteile) */
+  put(mesh, i, x, y, z, sx, sy, sz, q, col) {
+    this.v3.set(x, y, z); this.sc.set(sx, sy, sz);
+    this.mat4.compose(this.v3, q, this.sc);
+    mesh.setMatrixAt(i, this.mat4);
+    if (col && mesh.instanceColor) mesh.setColorAt(i, col);
+  },
+
+  /** Eine Waffe an Position und Ausrichtung. `gi` zaehlt ueber alle Waffen —
+      in der Hand und am Boden — weil beide dieselben Meshes benutzen. */
+  drawGun(gi, id, rar, ox, oy, oz, fx, fz, tilt, upright) {
+    const S = GUN_SHAPE[id] || GUN_SHAPE.ar;
+    const E = this.eul, Q = this.quat2 || (this.quat2 = new THREE.Quaternion());
+    const yaw = Math.atan2(fx, fz);
+    E.set(tilt || 0, yaw, upright ? 0 : 0, 'YXZ');
+    // Ausrichtung des Laufs: entlang der Blickrichtung liegend
+    const qBody = this._qb || (this._qb = new THREE.Quaternion());
+    E.set(0, yaw, tilt || 0); qBody.setFromEuler(E);
+    const C = this._gc || (this._gc = new THREE.Color());
+    C.set(RARITY[rar] ? RARITY[rar].col : '#8a8f98').multiplyScalar(0.55).addScalar(0.16);
+
+    const bl = S.body[0];
+    this.put(this.dyn.gunBody, gi, ox, oy, oz, S.body[2], S.body[1], bl, qBody, C);
+
+    // Lauf ragt nach vorn, Zylinder zeigt in +y -> um 90 Grad kippen
+    const bx = ox + fx * (bl / 2 + S.barrel[1] / 2), bz = oz + fz * (bl / 2 + S.barrel[1] / 2);
+    const qBar = this._qr || (this._qr = new THREE.Quaternion());
+    E.set(Math.PI / 2 + (tilt || 0), 0, 0);
+    const qPitch = this._qp || (this._qp = new THREE.Quaternion());
+    qPitch.setFromEuler(E);
+    const qYaw = this._qy || (this._qy = new THREE.Quaternion());
+    E.set(0, yaw, 0); qYaw.setFromEuler(E);
+    qBar.copy(qYaw).multiply(qPitch);
+    this.put(this.dyn.gunBarrel, gi, bx, oy + S.body[1] * 0.12, bz,
+             S.barrel[0], S.barrel[1], S.barrel[0], qBar);
+
+    // Magazin unter dem Verschluss
+    this.put(this.dyn.gunMag, gi, ox - fx * bl * 0.08, oy - S.body[1] * 0.55 - S.mag[1] * 0.4,
+             oz - fz * bl * 0.08, S.mag[0], S.mag[1], S.mag[2], qBody);
+  },
+
   updateActors(p) {
-    const body = this.dyn.body, head = this.dyn.head, gun = this.dyn.gun, sh = this.dyn.shadow;
-    const arm = this.dyn.arm, leg = this.dyn.leg;
-    const M = this.mat4, Q = this.quat, E = this.eul, P = this.v3, S = this.sc, C = this.col;
-    let n = 0;
+    const D = this.dyn;
+    const M = this.mat4, Q = this.quat, E = this.eul, C = this.col;
+    const skin = this._skin || (this._skin = new THREE.Color('#e0b189'));
+    const white = this._white || (this._white = new THREE.Color('#ffffff'));
+    let n = 0, gi = 0;
     const far2 = 2600 * 2600;
+    const MAXDRAW = 34;                       // reicht fuers Sichtfeld, spart Rechenzeit
+
     for (const a of Game.actors) {
       if (!a.alive || a === p) continue;
       if (a.drop.phase === 'bus') continue;
       if (dist2(a.x, a.y, p.x, p.y) > far2) continue;
-      if (n >= body.count_max) break;
+      if (n >= MAXDRAW) break;
       const air = a.drop.phase !== 'ground';
       const base = air ? a.drop.h * 3000 : 0;
-      const hex = ACTOR_COLS[a.color % ACTOR_COLS.length];
-      C.set(a.hurtT > 0 ? '#ffffff' : hex);
+      const hurt = a.hurtT > 0;
+      C.set(hurt ? '#ffffff' : ACTOR_COLS[a.color % ACTOR_COLS.length]);
+      const legCol = hurt ? white : (this._pants || (this._pants = new THREE.Color('#39435c')));
 
+      const H = BODY_H;
+      const c = Math.cos(a.aimAng), sn = Math.sin(a.aimAng);
+      const rx = -sn, rz = c;                                  // Rechtsvektor
       E.set(0, -a.aimAng - Math.PI / 2, 0); Q.setFromEuler(E);
-      const c = Math.cos(a.aimAng), s2 = Math.sin(a.aimAng);
-      const rx = -s2, rz = c;                       // Rechtsvektor der Figur
-      // Schrittzyklus: laufende Gegner sollen sich auch von weitem bewegen
-      const sp = Math.hypot(a.vx || 0, a.vy || 0);
-      a.step = (a.step || 0) + (a.lastX === undefined ? 0
-                : dist(a.x, a.y, a.lastX, a.lastY) * 0.055);
+
+      // Schrittphase aus der zurueckgelegten Strecke: laeuft nur, wer laeuft
+      const moved = a.lastX === undefined ? 0 : dist(a.x, a.y, a.lastX, a.lastY);
       a.lastX = a.x; a.lastY = a.y;
-      const sw = Math.sin(a.step) * 9, sw2 = -sw;
+      a.step = (a.step || 0) + moved * 0.055;
+      a.gait = lerp(a.gait || 0, Math.min(1, moved * 14), 0.25);   // 0 = steht, 1 = laeuft
+      const ph = a.step, g = a.gait * (air ? 0.2 : 1);
+      const swing = Math.sin(ph) * 0.55 * g;
+      const knee = Math.max(0, -Math.cos(ph)) * 0.5 * g;
 
-      P.set(a.x, base + BODY_H * 0.56, a.y); S.set(26, BODY_H * .40, 17);
-      M.compose(P, Q, S); body.setMatrixAt(n, M); body.setColorAt(n, C);
+      // --- Rumpf, Huefte, Kopf, Rucksack
+      const hipY = base + H * 0.44, chestY = base + H * 0.63, headY = base + H * 0.87;
+      this.put(D.hips, n, a.x, hipY, a.y, 22, H * 0.10, 15, Q, legCol);
+      this.put(D.torso, n, a.x, chestY, a.y, 23, H * 0.26, 15, Q, C);
+      this.put(D.head, n, a.x + c * 1.5, headY, a.y + sn * 1.5, 14, 14.5, 13.5, Q, hurt ? white : skin);
+      // Muetze in Trikotfarbe: sonst verschwimmt der Hautton mit dem Rumpf
+      this.put(D.cap, n, a.x + c * 1.5, headY + 8.5, a.y + sn * 1.5, 15, 5, 14.5, Q, C);
+      this.put(D.pack, n, a.x - c * 11, base + H * 0.66, a.y - sn * 11, 15, H * 0.20, 7, Q,
+               this._packc || (this._packc = new THREE.Color('#5d6440')));
 
-      P.set(a.x, base + BODY_H * 0.86, a.y); S.set(17, 17, 17);
-      M.compose(P, Q, S); head.setMatrixAt(n, M);
-      C.set(a.hurtT > 0 ? '#ffffff' : '#e0b189');
-      head.setColorAt(n, C);
+      // --- Beine: Oberschenkel schwingt, Knie knickt nach hinten
+      for (let k = 0; k < 2; k++) {
+        const side = k ? 1 : -1, sw = k ? swing : -swing, kn = k ? knee : Math.max(0, Math.cos(ph)) * 0.5 * g;
+        const hx = a.x + rx * side * 6.5, hz = a.y + rz * side * 6.5;
+        const kx = hx + c * Math.sin(sw) * H * 0.22, kz = hz + sn * Math.sin(sw) * H * 0.22;
+        const kY = hipY - Math.cos(sw) * H * 0.22;
+        const ax2 = kx + c * Math.sin(sw - kn) * H * 0.21, az2 = kz + sn * Math.sin(sw - kn) * H * 0.21;
+        const aY = kY - Math.cos(sw - kn) * H * 0.21;
+        this.seg(D.limb, n * 8 + k * 2, hx, hipY, hz, kx, kY, kz, 8.5, legCol);
+        this.seg(D.limb, n * 8 + k * 2 + 1, kx, kY, kz, ax2, aY, az2, 7.5, legCol);
+        this.put(D.boot, n * 2 + k, ax2 + c * 2.5, aY + 2.5, az2 + sn * 2.5, 8, 5, 12, Q,
+                 this._bootc || (this._bootc = new THREE.Color('#2c2a26')));
+      }
 
-      // Arme links und rechts, der rechte nach vorn an die Waffe
+      // --- Arme: bewaffnet greifen beide nach vorn an die Waffe,
+      //     unbewaffnet pendeln sie gegenlaeufig zu den Beinen
+      const armed = !!a.gun;
+      const shY = base + H * 0.74;
+      const hands = [];
       for (let k = 0; k < 2; k++) {
         const side = k ? 1 : -1;
-        P.set(a.x + rx * side * 17 + c * (k ? 8 : 0),
-              base + BODY_H * 0.56,
-              a.y + rz * side * 17 + s2 * (k ? 8 : 0));
-        S.set(8, BODY_H * 0.34, 8);
-        M.compose(P, Q, S); arm.setMatrixAt(n * 2 + k, M);
-        arm.setColorAt(n * 2 + k, C);
+        const sx = a.x + rx * side * 13.5, sz = a.y + rz * side * 13.5;
+        let ex, ez, eY, wx, wz, wY;
+        if (armed) {
+          const reach = k ? 20 : 12;                       // rechte Hand weiter vorn
+          ex = sx + c * reach * 0.5 + rx * side * -2; ez = sz + sn * reach * 0.5 + rz * side * -2;
+          eY = shY - H * 0.13;
+          wx = a.x + c * (16 + reach * 0.35) + rx * 4; wz = a.y + sn * (16 + reach * 0.35) + rz * 4;
+          wY = base + H * 0.60;
+        } else {
+          const sw2 = k ? -swing : swing;
+          ex = sx + c * Math.sin(sw2) * H * 0.20; ez = sz + sn * Math.sin(sw2) * H * 0.20;
+          eY = shY - Math.cos(sw2) * H * 0.20;
+          wx = ex + c * Math.sin(sw2 * 0.6) * H * 0.19; wz = ez + sn * Math.sin(sw2 * 0.6) * H * 0.19;
+          wY = eY - Math.cos(sw2 * 0.6) * H * 0.19;
+        }
+        this.seg(D.limb, n * 8 + 4 + k * 2, sx, shY, sz, ex, eY, ez, 7.5, C);
+        this.seg(D.limb, n * 8 + 4 + k * 2 + 1, ex, eY, ez, wx, wY, wz, 6.5, C);
+        this.put(D.hand, n * 2 + k, wx, wY, wz, 6, 6, 6, Q, hurt ? white : skin);
+        hands.push({ x: wx, y: wY, z: wz });
       }
-      // Beine mit Schrittbewegung
-      for (let k = 0; k < 2; k++) {
-        const side = k ? 1 : -1, off = k ? sw : sw2;
-        P.set(a.x + rx * side * 7 + c * off * 0.5,
-              base + BODY_H * 0.19,
-              a.y + rz * side * 7 + s2 * off * 0.5);
-        S.set(9, BODY_H * 0.38, 9);
-        M.compose(P, Q, S); leg.setMatrixAt(n * 2 + k, M);
+
+      // --- Waffe in den Haenden
+      if (armed && gi < D.gunBody.instanceMatrix.count) {
+        const h = hands[1];
+        this.drawGun(gi++, a.gun.id, a.gun.rar, h.x + c * 3, h.y + 2, h.z + sn * 3, c, sn, 0);
       }
-      C.set(a.hurtT > 0 ? '#ffffff' : hex);
 
-      // Waffe waagerecht vor der Brust in Blickrichtung
-      P.set(a.x + c * 22 + rx * 9, base + BODY_H * 0.58, a.y + s2 * 22 + rz * 9);
-      S.set(a.gun ? 32 : 14, 5.5, 5.5);
-      M.compose(P, Q, S); gun.setMatrixAt(n, M);
-
-      P.set(a.x, base + 1.5, a.y); S.set(22, 1, 22);
-      M.compose(P, this.quatId || (this.quatId = new THREE.Quaternion()), S);
-      sh.setMatrixAt(n, M);
+      this.put(D.shadow, n, a.x, base + 1.5, a.y, 24, 1, 24,
+               this.quatId || (this.quatId = new THREE.Quaternion()));
       n++;
     }
-    for (const m of [body, head, gun, sh]) {
-      m.count = n;
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+
+    // --- Waffen am Boden: liegend, leicht gedreht, statt schwebender Wuerfel
+    const r2 = 1500 * 1500;
+    for (const l of World.loot) {
+      if (l.taken || !l.data || l.data.kind !== 'gun') continue;
+      if (gi >= D.gunBody.instanceMatrix.count) break;
+      if (dist2(l.x, l.y, p.x, p.y) > r2) continue;
+      const ang = l.bob;                                  // fester Winkel je Fundstueck
+      this.drawGun(gi++, l.data.id, l.data.rar, l.x, 7, l.y, Math.cos(ang), Math.sin(ang), 0);
     }
-    for (const m of [arm, leg]) {
-      m.count = n * 2;
-      m.instanceMatrix.needsUpdate = true;
-      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+
+    for (const k of ['torso', 'hips', 'head', 'cap', 'pack', 'shadow']) {
+      D[k].count = n; D[k].instanceMatrix.needsUpdate = true;
+      if (D[k].instanceColor) D[k].instanceColor.needsUpdate = true;
+    }
+    D.limb.count = n * 8; D.limb.instanceMatrix.needsUpdate = true;
+    if (D.limb.instanceColor) D.limb.instanceColor.needsUpdate = true;
+    for (const k of ['hand', 'boot']) {
+      D[k].count = n * 2; D[k].instanceMatrix.needsUpdate = true;
+      if (D[k].instanceColor) D[k].instanceColor.needsUpdate = true;
+    }
+    for (const k of ['gunBody', 'gunBarrel', 'gunMag']) {
+      D[k].count = gi; D[k].instanceMatrix.needsUpdate = true;
+      if (D[k].instanceColor) D[k].instanceColor.needsUpdate = true;
     }
   },
 
   updateLoot(p) {
-    const L = this.dyn.loot, CH = this.dyn.chest;
+    const L = this.dyn.loot, B = this.dyn.bottle, CH = this.dyn.chest;
     const M = this.mat4, Q = this.quat, E = this.eul, P = this.v3, S = this.sc, C = this.col;
-    let n = 0, m = 0;
-    const r2 = 1700 * 1700;
+    let n = 0, m = 0, ch = 0;
+    const r2 = 1500 * 1500;
     for (const l of World.loot) {
-      if (l.taken || n >= 700) continue;
+      if (l.taken || !l.data) continue;
+      if (l.data.kind === 'gun') continue;          // Waffen zeichnet updateActors
       if (dist2(l.x, l.y, p.x, p.y) > r2) continue;
-      const bob = Math.sin(this.time * 2.2 + l.bob) * 5;
-      E.set(0, this.time * 1.3 + l.bob, 0.35); Q.setFromEuler(E);
-      P.set(l.x, 30 + bob, l.y); S.set(15, 15, 15);
-      M.compose(P, Q, S); L.setMatrixAt(n, M);
-      C.set(l.data.kind === 'gun' ? RARITY[l.data.rar].col : l.data.kind === 'ammo' ? '#c8b48a' : '#7fe0b0');
-      L.setColorAt(n, C);
-      n++;
+      // leichtes Wippen statt Rotation: es soll am Boden liegen, nicht schweben
+      const bob = Math.sin(this.time * 1.8 + l.bob) * 1.2;
+      E.set(0, l.bob * 3, 0); Q.setFromEuler(E);
+      if (l.data.kind === 'con') {
+        C.set(CONSUM[l.data.id] && (l.data.id === 'mini' || l.data.id === 'big') ? '#5ad2ff' : '#7fe0a0');
+        P.set(l.x, 9 + bob, l.y); S.set(8, 18, 8);
+        M.compose(P, Q, S); B.setMatrixAt(m, M); B.setColorAt(m, C); m++;
+      } else {
+        C.set(l.data.kind === 'ammo' ? '#b39a63' : '#9aa7b8');
+        P.set(l.x, 6 + bob, l.y); S.set(19, 12, 13);
+        M.compose(P, Q, S); L.setMatrixAt(n, M); L.setColorAt(n, C); n++;
+      }
+      if (n >= L.instanceMatrix.count || m >= B.instanceMatrix.count) break;
     }
     for (const c of World.chests) {
-      if (m >= 120) break;
+      if (ch >= 120) break;
       if (dist2(c.x, c.y, p.x, p.y) > r2) continue;
       E.set(0, 0, 0); Q.setFromEuler(E);
-      P.set(c.x, 17, c.y); S.set(44, 34, 30);
-      M.compose(P, Q, S); CH.setMatrixAt(m, M);
-      C.set(c.open ? '#5d4f34' : '#e0a83c'); CH.setColorAt(m, C);
-      m++;
+      P.set(c.x, 17, c.y); S.set(46, 34, 32);
+      M.compose(P, Q, S); CH.setMatrixAt(ch, M);
+      C.set(c.open ? '#5d4f34' : '#e0a83c'); CH.setColorAt(ch, C);
+      ch++;
     }
-    L.count = n; CH.count = m;
-    L.instanceMatrix.needsUpdate = true; CH.instanceMatrix.needsUpdate = true;
-    if (L.instanceColor) L.instanceColor.needsUpdate = true;
-    if (CH.instanceColor) CH.instanceColor.needsUpdate = true;
+    L.count = n; B.count = m; CH.count = ch;
+    for (const mesh of [L, B, CH]) {
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    }
   },
 
   updateBuilt(p) {
