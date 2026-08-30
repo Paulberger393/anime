@@ -1590,6 +1590,7 @@ const BODY_H = 92;                  // Körperhöhe eines Spielers
 const WALL_H = 170;                 // Höhe der Hauswände
 const BUILT_H = 150;                // Höhe gebauter Wände
 const CHUNK = 1450;                 // Kantenlänge eines Kulissen-Chunks
+const ROOF_Y = 177;                 // Oberkante der Hauswaende samt Dach
 
 /* Masse der Waffenmodelle in Welteinheiten (50 = 1 m). Die Silhouette soll
    den Typ auf Distanz verraten: langer duenner Lauf = Scharfschuetze,
@@ -1830,7 +1831,7 @@ const R3D = {
                                            E.set(0, (o.x % 7) * .2, 0); Q.setFromEuler(E); }
           }
           else if (type === 'roof') {
-            P.set(o.x + o.w / 2, WALL_H + 7, o.y + o.h / 2);
+            P.set(o.x + o.w / 2, ROOF_Y, o.y + o.h / 2);
             S.set(o.w + 18, 14, o.h + 18); Q.identity();
           }
           else if (type === 'trunk'){ const h = (o.kind === 'pine' ? 175 : o.kind === 'dead' ? 195 : 150) * o.s;
@@ -3306,84 +3307,185 @@ const Game = {
     return clamp(1 - d / 1500, 0, 1) ** 2;
   },
 
-  /* ------------------------------------------------------ bullets */
+  /* ------------------------------------------------------ bullets
+     Geschosse wurden frueher in Teilschritten von bis zu 26 Einheiten
+     bewegt und nur an den Stuetzpunkten geprueft. Hauswaende sind aber nur
+     20 Einheiten dick — je nachdem, wo man stand, passte die Wand genau
+     zwischen zwei Stuetzpunkte und der Schuss ging hindurch. Deshalb jetzt
+     ein exakter Streckentest: die gesamte Flugstrecke eines Bildes wird
+     gegen die Geometrie geschnitten, unabhaengig von Schrittweite und
+     Standposition.                                                        */
+
+  /** Kleinstes t in [0,1], an dem die Strecke ein Rechteck betritt, sonst -1 */
+  segBox(x0, y0, dx, dy, minx, miny, maxx, maxy) {
+    let t0 = 0, t1 = 1;
+    if (Math.abs(dx) < 1e-9) { if (x0 < minx || x0 > maxx) return -1; }
+    else {
+      let a = (minx - x0) / dx, bq = (maxx - x0) / dx;
+      if (a > bq) { const h = a; a = bq; bq = h; }
+      if (a > t0) t0 = a; if (bq < t1) t1 = bq;
+      if (t0 > t1) return -1;
+    }
+    if (Math.abs(dy) < 1e-9) { if (y0 < miny || y0 > maxy) return -1; }
+    else {
+      let a = (miny - y0) / dy, bq = (maxy - y0) / dy;
+      if (a > bq) { const h = a; a = bq; bq = h; }
+      if (a > t0) t0 = a; if (bq < t1) t1 = bq;
+      if (t0 > t1) return -1;
+    }
+    return t0;
+  },
+
+  /** Kleinstes t in [0,1], an dem die Strecke einen Kreis betritt, sonst -1 */
+  segCircle(x0, y0, dx, dy, cx, cy, r) {
+    const fx = x0 - cx, fy = y0 - cy;
+    const a = dx * dx + dy * dy;
+    if (a < 1e-9) return (fx * fx + fy * fy <= r * r) ? 0 : -1;
+    const bq = 2 * (fx * dx + fy * dy);
+    const c = fx * fx + fy * fy - r * r;
+    const disc = bq * bq - 4 * a * c;
+    if (disc < 0) return -1;
+    const sq = Math.sqrt(disc);
+    let t = (-bq - sq) / (2 * a);
+    if (t < 0) t = (-bq + sq) / (2 * a);
+    if (t < 0 || t > 1) return -1;
+    return t;
+  },
+
   updateBullets(dt) {
     const list = this.bullets;
     for (let i = 0; i < list.length; i++) {
       const b = list[i];
       if (!b.on) continue;
       const sp = Math.hypot(b.vx, b.vy, b.vz || 0);
-      const steps = Math.max(1, Math.ceil(sp * dt / 26));   // no tunnelling through walls
-      const sdt = dt / steps;
-      for (let s = 0; s < steps && b.on; s++) {
-        b.px = b.x; b.py = b.y;
-        b.x += b.vx * sdt; b.y += b.vy * sdt;
-        b.y3 += (b.vz || 0) * sdt;
-        b.left -= sp * sdt;
-        if (b.y3 <= 0) {                                    // Einschlag im Boden
-          if (b.rocket) this.explode(b.x, b.y, b);
-          else { this.spark3(b.x, 4, b.y, 5, .2); this.endBullet(b); }
-          break;
-        }
-        if (b.left <= 0 || b.x < 0 || b.y < 0 || b.x > MAP || b.y > MAP) { this.endBullet(b, false); break; }
-        if (this.bulletHit(b)) break;
-      }
+      const travel = Math.min(sp * dt, b.left);
+      if (travel <= 0.0001) { this.endBullet(b); continue; }
+      const f = travel / sp;
+      const dx = b.vx * f, dy = b.vy * f, dz = (b.vz || 0) * f;
+      const x0 = b.x, y0 = b.y, z0 = b.y3;
+      b.px = x0; b.py = y0;
+
+      const hit = this.sweep(b, x0, y0, z0, dx, dy, dz);
+      const t = hit ? hit.t : 1;
+      b.x = x0 + dx * t; b.y = y0 + dy * t; b.y3 = z0 + dz * t;
+      b.left -= travel * t;
+
+      if (hit) { this.resolveHit(b, hit); continue; }
+      if (b.left <= 0.0001 || b.x < 0 || b.y < 0 || b.x > MAP || b.y > MAP) this.endBullet(b);
     }
   },
 
-  bulletHit(b) {
-    // --- actors
-    const near = this.aGrid.query(b.x, b.y, 60, this._tmp);
-    for (let i = 0; i < near.length; i++) {
-      const o = near[i];
-      if (o === b.owner || !o.alive || o.drop.phase !== 'ground') continue;
-      if (dist2(b.x, b.y, o.x, o.y) > (o.r + 4) * (o.r + 4)) continue;
-      if (b.y3 < 0 || b.y3 > BODY_H) continue;             // über den Kopf / unter die Füße
-      if (b.rocket) { this.explode(b.x, b.y, b); return true; }
-      const dead = o.hurt(b.dmg, b.owner);
-      this.hitFx(b.x, b.y, b.dmg, o === this.player, o);
-      if (b.owner === this.player) this.hitMark(dead);
-      Snd.play('hit', b.owner === this.player ? 0.9 : this.volAt(b.x, b.y) * .5);
-      if (o === this.player) { this.flash(0.55); Snd.play('hurt', .9); }
-      if (dead) this.onKill(b.owner, o, b.owner && b.owner.gun ? b.owner.gun.id : 'gun');
-      this.endBullet(b, true);
-      return true;
+  /** Frueheste Kollision der Strecke; null wenn frei */
+  sweep(b, x0, y0, z0, dx, dy, dz) {
+    let best = null;
+    const mx = x0 + dx / 2, my = y0 + dy / 2;
+    const rad = Math.hypot(dx, dy) / 2 + 70;
+    const zAt = t => z0 + dz * t;
+
+    // --- Boden
+    if (dz < 0 && z0 + dz <= 0) {
+      const t = clamp(-z0 / dz, 0, 1);
+      best = { t, kind: 'ground' };
     }
-    // --- built structures
-    const built = World.bGrid.query(b.x, b.y, 70, this._q2);
+
+    // --- Akteure
+    const acts = this.aGrid.query(mx, my, rad, this._tmp);
+    for (let i = 0; i < acts.length; i++) {
+      const o = acts[i];
+      if (o === b.owner || !o.alive || o.drop.phase !== 'ground') continue;
+      const t = this.segCircle(x0, y0, dx, dy, o.x, o.y, o.r + 4);
+      if (t < 0 || (best && t >= best.t)) continue;
+      const z = zAt(t);
+      if (z < 0 || z > BODY_H) continue;
+      best = { t, kind: 'actor', obj: o };
+    }
+
+    // --- gebaute Waende
+    const built = World.bGrid.query(mx, my, rad, this._q2);
     for (let i = 0; i < built.length; i++) {
       const s = built[i];
       if (s.hp <= 0) continue;
-      if (b.x < s.bx || b.x > s.bx2 || b.y < s.by || b.y > s.by2) continue;
-      if (b.y3 > BUILT_H * (s.buildT > 0 ? clamp(1 - s.buildT / s.build, .15, 1) : 1)) continue;
-      if (b.rocket) { this.explode(b.x, b.y, b); return true; }
-      World.damageStructure(s, b.dmg);
-      this.spark(b.x, b.y, Math.atan2(-b.vy, -b.vx), 160, MAT_INFO[s.mat].col, 0.2);
-      this.endBullet(b, true);
-      return true;
+      const t = this.segBox(x0, y0, dx, dy, s.bx, s.by, s.bx2, s.by2);
+      if (t < 0 || (best && t >= best.t)) continue;
+      const grow = s.buildT > 0 ? clamp(1 - s.buildT / s.build, .15, 1) : 1;
+      if (zAt(t) > BUILT_H * grow) continue;
+      best = { t, kind: 'built', obj: s };
     }
-    // --- world walls / rocks / trees
-    const st = World.sGrid.query(b.x, b.y, 70, this._q);
+
+    // --- Daecher: ueber die Wand hinweg ins Haus schiessen ging bisher,
+    //     obwohl dort sichtbar ein Dach liegt. Der Grundriss ist eine
+    //     waagerechte Ebene auf Wandhoehe.
+    if (Math.abs(dz) > 1e-9) {
+      const tr = (ROOF_Y - z0) / dz;
+      if (tr >= 0 && tr <= 1 && (!best || tr < best.t)) {
+        const rx = x0 + dx * tr, ry = y0 + dy * tr;
+        const foot = World.sGrid.query(rx, ry, 40, this._q3 || (this._q3 = []));
+        for (let i = 0; i < foot.length; i++) {
+          const o = foot[i];
+          if (o.w === undefined || o.solid) continue;          // nur Grundrisse
+          if (rx < o.x || rx > o.x + o.w || ry < o.y || ry > o.y + o.h) continue;
+          best = { t: tr, kind: 'static', obj: o };
+          break;
+        }
+      }
+    }
+
+    // --- Hauswaende, Baeume, Felsen
+    const st = World.sGrid.query(mx, my, rad, this._q);
     for (let i = 0; i < st.length; i++) {
       const o = st[i];
+      let t;
       if (o.w !== undefined) {
         if (!o.solid) continue;
-        if (b.x < o.x || b.x > o.x2 || b.y < o.y || b.y > o.y2) continue;
-        if (b.y3 > WALL_H) continue;                        // über das Dach hinweg
+        t = this.segBox(x0, y0, dx, dy, o.x, o.y, o.x2, o.y2);
+        if (t < 0 || (best && t >= best.t)) continue;
+        if (zAt(t) > WALL_H) continue;
       } else {
         if (o.hp <= 0 || o.type === 'crate') continue;
-        if (dist2(b.x, b.y, o.x, o.y) > (o.r * 0.62) * (o.r * 0.62)) continue;
-        // Bäume blocken nur am Stamm: die Krone hängt über Kopfhöhe
-        if (o.type === 'tree' && b.y3 > 150 * o.s) continue;
-        if (o.type === 'rock' && b.y3 > o.r * 0.95) continue;   // Findlinge sind kniehoch
-        o.hp -= b.dmg * 0.5;
+        t = this.segCircle(x0, y0, dx, dy, o.x, o.y, o.r * 0.62);
+        if (t < 0 || (best && t >= best.t)) continue;
+        const z = zAt(t);
+        if (o.type === 'tree' && z > 150 * o.s) continue;      // Krone haengt hoeher
+        if (o.type === 'rock' && z > o.r * 0.95) continue;     // Findlinge sind kniehoch
       }
-      if (b.rocket) { this.explode(b.x, b.y, b); return true; }
-      this.spark(b.x, b.y, Math.atan2(-b.vy, -b.vx), 150, '#cfd6e0', 0.2);
-      this.endBullet(b, true);
-      return true;
+      best = { t, kind: 'static', obj: o };
     }
-    return false;
+    return best;
+  },
+
+  resolveHit(b, hit) {
+    if (b.rocket) { this.explode(b.x, b.y, b); return; }
+    switch (hit.kind) {
+      case 'ground':
+        this.spark3(b.x, 4, b.y, 5, .2);
+        this.spark(b.x, b.y, rnd(TAU), 90, '#c8bda0', .18);
+        this.endBullet(b);
+        break;
+      case 'actor': {
+        const o = hit.obj;
+        const dead = o.hurt(b.dmg, b.owner);
+        this.hitFx(b.x, b.y, b.dmg, o === this.player, o);
+        if (b.owner === this.player) this.hitMark(dead);
+        Snd.play('hit', b.owner === this.player ? 0.9 : this.volAt(b.x, b.y) * .5);
+        if (o === this.player) { this.flash(0.55); Snd.play('hurt', .9); }
+        if (dead) this.onKill(b.owner, o, b.owner && b.owner.gun ? b.owner.gun.id : 'gun');
+        this.endBullet(b);
+        break;
+      }
+      case 'built':
+        World.damageStructure(hit.obj, b.dmg);
+        this.spark(b.x, b.y, Math.atan2(-b.vy, -b.vx), 160, MAT_INFO[hit.obj.mat].col, 0.2);
+        this.spark3(b.x, b.y3, b.y, 5, .18);
+        this.endBullet(b);
+        break;
+      default: {
+        const o = hit.obj;
+        if (o.w === undefined) o.hp -= b.dmg * 0.5;
+        this.spark(b.x, b.y, Math.atan2(-b.vy, -b.vx), 150, '#cfd6e0', 0.2);
+        this.spark3(b.x, b.y3, b.y, 5, .18);
+        this.endBullet(b);
+      }
+    }
   },
 
   endBullet(b) { b.on = false; },

@@ -173,6 +173,13 @@ niemanden. Die Zielhilfe korrigiert Drehung *und* Neigung, ein Treffer blitzt am
 Fadenkreuz auf. Gemessen: schief gezielt und ohne Zielhilfe gehen 14 Schuss fast
 alle daneben (37 Schaden statt 111), mit Zielhilfe treffen sie (222).
 
+Geschosse werden über die ganze Flugstrecke eines Bildes exakt gegen die
+Geometrie geschnitten (Strecke gegen Rechteck bzw. Kreis), nicht in Teilschritten
+abgetastet. Vorher waren die Schritte bis zu 26 Einheiten groß, Hauswände aber
+nur 20 dick — je nachdem, wo man stand, passte die Wand genau zwischen zwei
+Stützpunkte und der Schuss ging hindurch. Dächer blocken ebenfalls, sonst könnte
+man über die Wand hinweg ins Haus schießen.
+
 Geschosse haben seitdem eine echte Höhe. Nach oben zielen geht über den Gegner
 hinweg, über eine Hauswand hinweg schießen funktioniert, und Baumkronen hängen
 über Kopfhöhe — am Stamm bleibt eine Kugel hängen, an der Krone nicht.

@@ -16,6 +16,7 @@ const BODY_H = 92;                  // Körperhöhe eines Spielers
 const WALL_H = 170;                 // Höhe der Hauswände
 const BUILT_H = 150;                // Höhe gebauter Wände
 const CHUNK = 1450;                 // Kantenlänge eines Kulissen-Chunks
+const ROOF_Y = 177;                 // Oberkante der Hauswaende samt Dach
 
 /* Masse der Waffenmodelle in Welteinheiten (50 = 1 m). Die Silhouette soll
    den Typ auf Distanz verraten: langer duenner Lauf = Scharfschuetze,
@@ -256,7 +257,7 @@ const R3D = {
                                            E.set(0, (o.x % 7) * .2, 0); Q.setFromEuler(E); }
           }
           else if (type === 'roof') {
-            P.set(o.x + o.w / 2, WALL_H + 7, o.y + o.h / 2);
+            P.set(o.x + o.w / 2, ROOF_Y, o.y + o.h / 2);
             S.set(o.w + 18, 14, o.h + 18); Q.identity();
           }
           else if (type === 'trunk'){ const h = (o.kind === 'pine' ? 175 : o.kind === 'dead' ? 195 : 150) * o.s;
