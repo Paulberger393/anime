@@ -32,10 +32,10 @@ body.quer2 #stage{width:100vh;height:100vw;top:100%;left:0;
 /* Thumb-friendly landscape layout: the bottom-left quadrant stays completely
    free for the movement thumb, everything actionable arcs around the right one.
    Buttons sit low because a landscape iPhone is only ~390pt tall. */
-#bFire{width:82px;height:82px;right:14px;bottom:calc(env(safe-area-inset-bottom) + 62px);
+#bFire{width:96px;height:96px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 54px);
   background:rgba(255,72,72,.30);border-color:rgba(255,140,140,.55)}
 #bFire.on{background:rgba(255,72,72,.7)}
-#bFire .ic{font-size:26px}
+#bFire .ic{font-size:30px}
 #bPick  {width:50px;height:50px;right:106px;bottom:calc(env(safe-area-inset-bottom) + 58px)}
 #bReload{width:52px;height:52px;right:104px;bottom:calc(env(safe-area-inset-bottom) + 120px)}
 #bUse   {width:56px;height:56px;right:20px;bottom:calc(env(safe-area-inset-bottom) + 152px);
@@ -124,6 +124,38 @@ body.quer2 #stage{width:100vh;height:100vw;top:100%;left:0;
 #cross i{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;
   background:rgba(0,0,0,.55);box-shadow:0 0 0 1px rgba(255,255,255,.7)}
 #cross.hit::before,#cross.hit::after{background:#ff6b6b}
+#cross.lock::before,#cross.lock::after{background:#ff9d3a;box-shadow:0 0 6px #ff6b2a}
+
+/* Gegnermarker: ohne die findet man in der Ego-Sicht schlicht niemanden. */
+#marks{position:absolute;inset:0;pointer-events:none}
+.mk{position:absolute;transform:translate(-50%,-100%);text-align:center;white-space:nowrap;
+  transition:opacity .12s}
+.mk b{display:block;font-size:10px;font-weight:800;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;
+  letter-spacing:.3px}
+.mk i{display:block;width:44px;height:4px;margin:2px auto 0;border-radius:2px;
+  background:rgba(0,0,0,.6);overflow:hidden}
+.mk i s{display:block;height:100%;background:#4ade80;text-decoration:none;transform-origin:left}
+.mk.sh i s{background:#39c8ff}
+.mk u{display:block;font-size:9px;opacity:.75;text-decoration:none;margin-top:1px;
+  text-shadow:0 1px 3px #000}
+.mk.far b{font-size:9px;opacity:.8}
+.mk.far i{width:30px;height:3px}
+
+/* Trefferbestaetigung: vier Striche, die kurz aufblitzen */
+#hitm{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;
+  pointer-events:none;opacity:0}
+#hitm.on{opacity:1;animation:hitpop .32s ease-out}
+#hitm::before,#hitm::after,#hitm i,#hitm u{content:"";position:absolute;width:12px;height:3px;
+  background:#fff;box-shadow:0 0 4px #000;border-radius:2px}
+#hitm::before{left:0;top:6px;transform:rotate(45deg)}
+#hitm::after{right:0;top:6px;transform:rotate(-45deg)}
+#hitm.kill::before,#hitm.kill::after{background:#ff5252}
+@keyframes hitpop{0%{transform:scale(.6);opacity:1}100%{transform:scale(1.5);opacity:0}}
+@media (prefers-reduced-motion:reduce){#hitm.on{animation:none}}
+
+/* leichte Abdunklung zu den Raendern — nimmt dem Bild das Flache */
+#vign{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 80% at 50% 48%,transparent 45%,rgba(0,0,0,.42) 100%)}
 
 /* Absprung: gross und mittig, weil man im Bus sonst nicht weiss, was zu tun ist */
 #bJump{width:120px;height:120px;left:50%;top:50%;margin:-60px 0 0 -60px;
@@ -220,6 +252,9 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
   <div id="hint" class="hide"></div>
   <div id="dmgFlash"></div>
   <div id="cross"><i></i></div>
+  <div id="marks"></div>
+  <div id="vign"></div>
+  <div id="hitm"><i></i><u></u></div>
   <div class="btn" id="bJump" data-act="jump"><div class="ic">🪂</div><div class="lb">ABSPRINGEN</div></div>
   <div id="alt"></div>
 
@@ -254,6 +289,11 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
     <button class="opt" data-opt="hand">Layout: <b>Rechts</b></button>
     <button class="opt" data-opt="view">Ansicht: <b>Ego 3D</b></button>
     <button class="opt" data-opt="quer">Ausrichtung: <b>Automatisch</b></button>
+    <button class="opt" data-opt="sens">Blick-Tempo: <b>Normal</b></button>
+    <button class="opt" data-opt="start">Startwaffe: <b>Pistole</b></button>
+    <button class="opt" data-opt="marks">Gegner-Marker: <b>An</b></button>
+    <button class="opt" data-opt="tapfire">Tippen = Schuss: <b>An</b></button>
+    <button class="opt" data-opt="autorun">Auto-Sprint: <b>An</b></button>
     <button class="opt" data-opt="quality">Grafik: <b>Auto</b></button>
   </div>
   <div id="stats"></div>
@@ -522,6 +562,7 @@ const Input = {
       stick.ox = stick.cx = s.x; stick.oy = stick.cy = s.y;
       stick.px = s.x; stick.py = s.y;                  // fuer das Blick-Delta
       stick.x = stick.y = stick.mag = 0;
+      stick.tStart = performance.now(); stick.moved = 0;
     }
   },
 
@@ -542,6 +583,7 @@ const Input = {
         // Auslenkung: gezogen wird wie mit einer Maus, nicht wie an einem Stick.
         s.dxA = (s.dxA || 0) + (q.x - (s.px === undefined ? q.x : s.px));
         s.dyA = (s.dyA || 0) + (q.y - (s.py === undefined ? q.y : s.py));
+        s.moved = (s.moved || 0) + Math.abs(q.x - s.px) + Math.abs(q.y - s.py);
         s.px = q.x; s.py = q.y;
         s.cx = q.x; s.cy = q.y;
         const m = Math.min(1, Math.hypot(dx, dy) / this.R);
@@ -563,7 +605,11 @@ const Input = {
         delete this.touchAct[t.identifier];
       }
       for (const s of [this.move, this.aim]) {
-        if (s.id === t.identifier) { s.id = null; s.active = false; s.x = s.y = s.mag = 0; s.px = s.py = undefined; }
+        if (s.id !== t.identifier) continue;
+        // kurzer, fast bewegungsloser Kontakt im Blickbereich = Schuss
+        if (s === this.aim && this.tapFire && s.moved < 14 &&
+            performance.now() - (s.tStart || 0) < 260) this.tapped.tapshot = true;
+        s.id = null; s.active = false; s.x = s.y = s.mag = 0; s.px = s.py = undefined;
       }
     }
   },
@@ -1600,9 +1646,28 @@ const R3D = {
     const geo = new THREE.SphereGeometry(4600, 24, 16);
     const mat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { top: { value: new THREE.Color(0x2f6fb8) }, bot: { value: new THREE.Color(0xcfe2f0) } },
-      vertexShader: 'varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'varying float h; uniform vec3 top; uniform vec3 bot; void main(){ gl_FragColor = vec4(mix(bot, top, smoothstep(-0.05, 0.55, h)), 1.0); }'
+      uniforms: { top: { value: new THREE.Color(0x2a6ab5) }, bot: { value: new THREE.Color(0xd6e6f2) },
+                  sunDir: { value: new THREE.Vector3(-0.5, 0.85, 0.28).normalize() } },
+      vertexShader: `varying vec3 vp;
+        void main(){ vp = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+      fragmentShader: `varying vec3 vp; uniform vec3 top; uniform vec3 bot; uniform vec3 sunDir;
+        // billiges Wertrauschen — reicht fuer weiche Wolkenbaender
+        float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+          return mix(mix(h21(i), h21(i+vec2(1,0)), f.x), mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), f.x), f.y); }
+        void main(){
+          vec3 c = mix(bot, top, smoothstep(-0.05, 0.55, vp.y));
+          float sun = max(dot(vp, sunDir), 0.0);
+          c += vec3(1.0, 0.86, 0.62) * pow(sun, 220.0) * 1.4;      // Sonnenscheibe
+          c += vec3(1.0, 0.82, 0.58) * pow(sun, 5.0) * 0.16;       // Hof drumherum
+          if (vp.y > 0.02) {
+            vec2 uv = vp.xz / max(vp.y, 0.05) * 0.55;
+            float n = noise(uv * 1.6) * 0.6 + noise(uv * 3.7) * 0.3 + noise(uv * 8.0) * 0.1;
+            float cl = smoothstep(0.52, 0.78, n) * smoothstep(0.02, 0.30, vp.y);
+            c = mix(c, vec3(1.0, 0.99, 0.97), cl * 0.75);
+          }
+          gl_FragColor = vec4(c, 1.0);
+        }`
     });
     this.sky = new THREE.Mesh(geo, mat);
     this.sky.frustumCulled = false;
@@ -1749,6 +1814,8 @@ const R3D = {
     this.dyn.body = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXA);
     this.dyn.head = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXA);
     this.dyn.gun  = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0x2b2f38), MAXA);
+    this.dyn.arm  = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXA * 2);
+    this.dyn.leg  = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0x39435c), MAXA * 2);
     const disc = new THREE.CircleGeometry(1, 12); disc.rotateX(-Math.PI / 2);
     this.dyn.shadow = new THREE.InstancedMesh(disc,
       new THREE.MeshBasicMaterial({ color: 0x101c10, transparent: true, opacity: .34, depthWrite: false }), MAXA);
@@ -1808,24 +1875,56 @@ const R3D = {
     this.scene.add(this.storm);
   },
 
-  /** Waffe am unteren Bildrand — verkauft die Ego-Perspektive */
+  /** Waffe am unteren Bildrand — verkauft die Ego-Perspektive.
+      Schlank und weit aussen: der erste Entwurf war ein 68 cm langer Klotz
+      mitten im Bild und hat ein Drittel der Sicht verdeckt. */
   buildViewModel() {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(7, 7, 34), new THREE.MeshLambertMaterial({ color: 0x33383f }));
-    body.position.set(0, 0, -14);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 22, 6), new THREE.MeshLambertMaterial({ color: 0x22262c }));
-    barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 1.4, -34);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(5.5, 12, 6), new THREE.MeshLambertMaterial({ color: 0x4a3524 }));
-    grip.position.set(0, -7, -6); grip.rotation.x = -0.22;
-    g.add(body, barrel, grip);
-    g.position.set(11, -9, -20);
+    const dark = new THREE.MeshLambertMaterial({ color: 0x2e343d });
+    const grey = new THREE.MeshLambertMaterial({ color: 0x454c57 });
+    const wood = new THREE.MeshLambertMaterial({ color: 0x54402a });
+
+    const receiver = new THREE.Mesh(new THREE.BoxGeometry(4.6, 5.4, 19), grey);
+    receiver.position.set(0, 0, -9);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 17, 6), dark);
+    barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 1.3, -25);
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.4, 1.6), dark);
+    sight.position.set(0, 3.9, -17);
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(3.4, 8.5, 5), dark);
+    mag.position.set(0, -5.4, -8); mag.rotation.x = 0.14;
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(3.8, 9, 4.4), wood);
+    grip.position.set(0, -5.6, 1); grip.rotation.x = -0.30;
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(3.8, 5.2, 9), wood);
+    stock.position.set(0, -1.2, 5);
+    g.add(receiver, barrel, sight, mag, grip, stock);
+
+    // Massstab und Sitz sind gemessen, nicht geraten: das Modell soll rund ein
+    // Viertel der Bildhoehe fuellen und in der unteren rechten Ecke sitzen.
+    g.position.set(12, -10.5, -26);
+    g.rotation.set(0.03, -0.11, 0.06);      // leicht eingedreht, wie gehalten
+    g.scale.setScalar(0.62);
     this.vm = g;
-    this.flash = new THREE.Mesh(new THREE.IcosahedronGeometry(5.5, 0),
+    this.vmBase = { x: 12, y: -10.5, z: -26 };
+
+    this.flash = new THREE.Mesh(new THREE.IcosahedronGeometry(3.4, 0),
       new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0, fog: false }));
-    this.flash.position.set(0, 1.4, -47);
+    this.flash.position.set(0, 1.3, -34);
     g.add(this.flash);
+    this.muzzleLight = new THREE.PointLight(0xffd9a0, 0, 460, 2);
+    this.muzzleLight.position.set(0, 3, -30);
+    g.add(this.muzzleLight);
     this.cam.add(g);
     this.scene.add(this.cam);
+  },
+
+  /** Weltpunkt -> Buehnen-Pixel. null, wenn hinter der Kamera. */
+  project(x, h, z, out) {
+    const v = this._pv || (this._pv = new THREE.Vector3());
+    v.set(x, h, z).project(this.cam);
+    if (v.z > 1) return null;                       // hinter der Kamera
+    out.x = (v.x * 0.5 + 0.5) * Game.W;
+    out.y = (-v.y * 0.5 + 0.5) * Game.H;
+    return out;
   },
 
   resize(w, h, dpr) {
@@ -1917,17 +2016,20 @@ Object.assign(R3D, {
     this.vm.visible = !air && p.alive && Game.state === 'play';
     const kick = p.muzzle > 0 ? 1 : 0;
     this.vmKick = lerp(this.vmKick || 0, kick, dt * (kick ? 40 : 9));
-    this.vm.position.set(11 - (Input.move.mag > .1 ? Math.sin(this.bobT) * 1.6 : 0),
-                         -9 + (Input.move.mag > .1 ? Math.cos(this.bobT * 2) * .9 : 0) - this.vmKick * 1.2,
-                         -20 + this.vmKick * 5);
-    this.vm.rotation.x = this.vmKick * 0.16;
-    this.vm.scale.setScalar(g ? 1 : 0.62);
+    const vb = this.vmBase, walking = Input.move.mag > .1;
+    this.vm.position.set(vb.x - (walking ? Math.sin(this.bobT) * 1.3 : 0),
+                         vb.y + (walking ? Math.cos(this.bobT * 2) * .8 : 0) - this.vmKick * 1.1,
+                         vb.z + this.vmKick * 4);
+    this.vm.rotation.set(0.03 + this.vmKick * 0.17, -0.09, 0.05);
+    this.vm.scale.setScalar(g ? 0.62 : 0.4);
     this.flash.material.opacity = p.muzzle > 0 ? 0.95 : 0;
     this.flash.scale.setScalar(p.muzzle > 0 ? rnd(0.7, 1.4) : 1);
+    this.muzzleLight.intensity = p.muzzle > 0 ? 4.2 : 0;
   },
 
   updateActors(p) {
     const body = this.dyn.body, head = this.dyn.head, gun = this.dyn.gun, sh = this.dyn.shadow;
+    const arm = this.dyn.arm, leg = this.dyn.leg;
     const M = this.mat4, Q = this.quat, E = this.eul, P = this.v3, S = this.sc, C = this.col;
     let n = 0;
     const far2 = 2600 * 2600;
@@ -1942,19 +2044,47 @@ Object.assign(R3D, {
       C.set(a.hurtT > 0 ? '#ffffff' : hex);
 
       E.set(0, -a.aimAng - Math.PI / 2, 0); Q.setFromEuler(E);
-      P.set(a.x, base + BODY_H * 0.42, a.y); S.set(30, BODY_H * .62, 20);
+      const c = Math.cos(a.aimAng), s2 = Math.sin(a.aimAng);
+      const rx = -s2, rz = c;                       // Rechtsvektor der Figur
+      // Schrittzyklus: laufende Gegner sollen sich auch von weitem bewegen
+      const sp = Math.hypot(a.vx || 0, a.vy || 0);
+      a.step = (a.step || 0) + (a.lastX === undefined ? 0
+                : dist(a.x, a.y, a.lastX, a.lastY) * 0.055);
+      a.lastX = a.x; a.lastY = a.y;
+      const sw = Math.sin(a.step) * 9, sw2 = -sw;
+
+      P.set(a.x, base + BODY_H * 0.56, a.y); S.set(26, BODY_H * .40, 17);
       M.compose(P, Q, S); body.setMatrixAt(n, M); body.setColorAt(n, C);
 
-      P.set(a.x, base + BODY_H * 0.87, a.y); S.set(17, 17, 17);
+      P.set(a.x, base + BODY_H * 0.86, a.y); S.set(17, 17, 17);
       M.compose(P, Q, S); head.setMatrixAt(n, M);
       C.set(a.hurtT > 0 ? '#ffffff' : '#e0b189');
       head.setColorAt(n, C);
+
+      // Arme links und rechts, der rechte nach vorn an die Waffe
+      for (let k = 0; k < 2; k++) {
+        const side = k ? 1 : -1;
+        P.set(a.x + rx * side * 17 + c * (k ? 8 : 0),
+              base + BODY_H * 0.56,
+              a.y + rz * side * 17 + s2 * (k ? 8 : 0));
+        S.set(8, BODY_H * 0.34, 8);
+        M.compose(P, Q, S); arm.setMatrixAt(n * 2 + k, M);
+        arm.setColorAt(n * 2 + k, C);
+      }
+      // Beine mit Schrittbewegung
+      for (let k = 0; k < 2; k++) {
+        const side = k ? 1 : -1, off = k ? sw : sw2;
+        P.set(a.x + rx * side * 7 + c * off * 0.5,
+              base + BODY_H * 0.19,
+              a.y + rz * side * 7 + s2 * off * 0.5);
+        S.set(9, BODY_H * 0.38, 9);
+        M.compose(P, Q, S); leg.setMatrixAt(n * 2 + k, M);
+      }
       C.set(a.hurtT > 0 ? '#ffffff' : hex);
 
       // Waffe waagerecht vor der Brust in Blickrichtung
-      const c = Math.cos(a.aimAng), s2 = Math.sin(a.aimAng);
-      P.set(a.x + c * 20, base + BODY_H * 0.62, a.y + s2 * 20);
-      S.set(a.gun ? 30 : 14, 6, 6);
+      P.set(a.x + c * 22 + rx * 9, base + BODY_H * 0.58, a.y + s2 * 22 + rz * 9);
+      S.set(a.gun ? 32 : 14, 5.5, 5.5);
       M.compose(P, Q, S); gun.setMatrixAt(n, M);
 
       P.set(a.x, base + 1.5, a.y); S.set(22, 1, 22);
@@ -1964,6 +2094,11 @@ Object.assign(R3D, {
     }
     for (const m of [body, head, gun, sh]) {
       m.count = n;
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    }
+    for (const m of [arm, leg]) {
+      m.count = n * 2;
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
@@ -2121,7 +2256,7 @@ const Game = {
 
   opts: {
     bots: 100, diff: 'normal', autofire: true, aim: 2,
-    speed: 1, sound: true, hand: 0, quality: 0, view: 1, sens: 1, quer: 0
+    speed: 1, sound: true, hand: 0, quality: 0, view: 1, sens: 1, quer: 0, start: 1, marks: 1, tapfire: 1, autorun: 1
   },
 
   /* ------------------------------------------------------ boot */
@@ -2142,6 +2277,8 @@ const Game = {
       alive: document.getElementById('alive'), storm: document.getElementById('storm'), kills: document.getElementById('kills'),
       feed: document.getElementById('feed'), toast: document.getElementById('toast'), hint: document.getElementById('hint'),
       flash: document.getElementById('dmgFlash'), buildBar: document.getElementById('buildBar'),
+      cross: document.getElementById('cross'), marks: document.getElementById('marks'),
+      hitm: document.getElementById('hitm'),
       jump: document.getElementById('bJump'), alt: document.getElementById('alt'),
       stats: document.getElementById('stats'), res: document.getElementById('res'),
       resT: document.getElementById('resT'), resS: document.getElementById('resS')
@@ -2151,6 +2288,7 @@ const Game = {
     this.buildSlots();          // must exist before Input caches hitboxes
     Input.init();
     Input.leftHanded = this.opts.hand === 1;
+    Input.tapFire = !!this.opts.tapfire;
     this.resize();
     addEventListener('resize', () => this.applyRotation());
     addEventListener('orientationchange', () => setTimeout(() => this.applyRotation(), 300));
@@ -2223,6 +2361,11 @@ const Game = {
       case 'hand': o.hand = o.hand ? 0 : 1; Input.leftHanded = o.hand === 1; break;
       case 'view': o.view = o.view ? 0 : 1; this.applyView(); break;
       case 'quer': o.quer = (o.quer + 1) % 3; this.applyRotation(); break;
+      case 'sens': o.sens = o.sens >= 1.6 ? 0.6 : +(o.sens + 0.2).toFixed(1); break;
+      case 'start': o.start = o.start ? 0 : 1; break;
+      case 'marks': o.marks = o.marks ? 0 : 1; break;
+      case 'tapfire': o.tapfire = o.tapfire ? 0 : 1; Input.tapFire = !!o.tapfire; break;
+      case 'autorun': o.autorun = o.autorun ? 0 : 1; break;
       case 'quality': o.quality = (o.quality + 1) % 3; this.resize(); break;
     }
     Store.data.opts = o; Store.save();
@@ -2240,7 +2383,13 @@ const Game = {
       hand: o.hand ? 'Links' : 'Rechts',
       quality: ['Auto', 'Hoch', 'Sparsam'][o.quality],
       view: o.view ? 'Ego 3D' : 'Top-Down',
-      quer: ['Automatisch', 'Quer ↺', 'Quer ↻'][o.quer]
+      quer: ['Automatisch', 'Quer ↺', 'Quer ↻'][o.quer],
+      sens: o.sens <= 0.7 ? 'Sehr langsam' : o.sens <= 0.9 ? 'Langsam' : o.sens <= 1.1 ? 'Normal'
+          : o.sens <= 1.3 ? 'Schnell' : 'Sehr schnell',
+      start: o.start ? 'Pistole' : 'Ohne',
+      marks: o.marks ? 'An' : 'Aus',
+      tapfire: o.tapfire ? 'An' : 'Aus',
+      autorun: o.autorun ? 'An' : 'Aus'
     };
     document.querySelectorAll('.opt').forEach(b => {
       const k = b.dataset.opt;
@@ -2340,6 +2489,7 @@ const Game = {
     document.getElementById('bBuild').classList.remove('on');
 
     this.el.hint.classList.add('hide');
+    if (this.markPool) for (const m of this.markPool) m.el.style.display = 'none';
     this.el.toast.classList.remove('show');
     this.el.flash.style.opacity = 0;
     this.el.menu.classList.add('hide');
@@ -2423,6 +2573,7 @@ const Game = {
     World.cleanup();
     this.reapDead();
     this.updateHUD();
+    if (this.state === 'play') this.updateMarks();
   },
 
   /* ------------------------------------------------------ bus & drop */
@@ -2522,6 +2673,13 @@ const Game = {
       a.state = a.isBot ? 'loot' : 'play';
       if (a === this.player) {
         this.state = 'play';
+        // Eine Startpistole macht den Unterschied zwischen "ich werde erschossen,
+        // bevor ich etwas finde" und "ich kann mich wehren".
+        if (this.opts.start && !a.gun) {
+          const g = makeGun('pistol', 0);
+          a.slots[0] = g; a.sel = 0; a.addAmmo('light', 72);
+          this.updateSlots();
+        }
         this.el.alt.textContent = '';
         this.el.jump.classList.add('hide');
         document.getElementById('cross').classList.toggle('hide', !this.v3);
@@ -2602,9 +2760,12 @@ const Game = {
     if (p.reloadT > 0) { p.reloadT -= dt; if (p.reloadT <= 0) this.finishReload(p); }
 
     // --- movement + aiming
-    const sprint = Input.btn.sprint ? 1.34 : 1;
     const mv = Input.move;
-    let firing = Input.btn.fire;
+    // Auto-Sprint: wer den Stick voll durchdrueckt, will rennen. Spart einen
+    // Knopf, den man auf dem Handy ohnehin kaum halten kann.
+    const auto = this.opts.autorun && mv.mag > 0.92 && this.v3 && p.healT <= 0;
+    const sprint = (Input.btn.sprint || auto) ? 1.34 : 1;
+    let firing = Input.btn.fire || Input.tap('tapshot');
 
     if (this.v3) {
       // Ego: der rechte Finger dreht den Kopf (Wisch = Maus), der linke laeuft
@@ -2618,15 +2779,16 @@ const Game = {
 
       const lock = this.aimAssist(p, p.aimAng);
       if (lock) {
-        const strength = [0, 0.22, 0.44][this.opts.aim] * dt * 12;
-        p.aimAng = angApproach(p.aimAng, lock.ang, Math.abs(angDiff(p.aimAng, lock.ang)) * clamp(strength, 0, 1));
-        const dy = (lock.actor.y3 || BODY_H * 0.6) - EYE;
-        p.pitch = lerp(p.pitch, Math.atan2(dy, lock.d), clamp(strength, 0, 1));
-        if (this.opts.autofire && Math.abs(angDiff(p.aimAng, lock.ang)) < 0.12) firing = true;
+        const strength = [0, 0.35, 0.7][this.opts.aim] * dt * 14;
+        const k = clamp(strength, 0, 1);
+        p.aimAng = angApproach(p.aimAng, lock.ang, Math.abs(angDiff(p.aimAng, lock.ang)) * k);
+        const dy = BODY_H * 0.58 - EYE;
+        p.pitch = lerp(p.pitch, Math.atan2(dy, Math.max(40, lock.d)), k);
+        // Grosszuegiger als vorher: 0.12 rad traf bei laufenden Zielen fast nie.
+        if (this.opts.autofire && Math.abs(angDiff(p.aimAng, lock.ang)) < 0.22) firing = true;
       }
       p.ang = p.aimAng;
-      this.el.crossHit = lock;
-      document.getElementById('cross').classList.toggle('hit', !!lock);
+      this.el.cross.classList.toggle('lock', !!lock);
 
       if (mv.mag > 0) {
         const c = Math.cos(p.aimAng), sn = Math.sin(p.aimAng);
@@ -2695,7 +2857,7 @@ const Game = {
       if (d > range) continue;
       const a = Math.atan2(o.y - p.y, o.x - p.x);
       const off = Math.abs(angDiff(ang, a));
-      if (off > 0.42) continue;                      // ~24° cone
+      if (off > (this.v3 ? 0.34 : 0.42)) continue;    // Zielkegel
       if (World.losBlocked(p.x, p.y, o.x, o.y)) continue;
       const score = off * 300 + d;
       if (score < bs) { bs = score; best = { ang: a, actor: o, d }; }
@@ -2793,6 +2955,7 @@ const Game = {
     if (!best) return;
     const dead = best.hurt(18, a);
     this.hitFx(best.x, best.y, 18, best === this.player, best);
+    if (a === this.player) this.hitMark(dead);
     if (dead) this.onKill(a, best, 'melee');
   },
 
@@ -2878,6 +3041,7 @@ const Game = {
       if (b.rocket) { this.explode(b.x, b.y, b); return true; }
       const dead = o.hurt(b.dmg, b.owner);
       this.hitFx(b.x, b.y, b.dmg, o === this.player, o);
+      if (b.owner === this.player) this.hitMark(dead);
       Snd.play('hit', b.owner === this.player ? 0.9 : this.volAt(b.x, b.y) * .5);
       if (o === this.player) { this.flash(0.55); Snd.play('hurt', .9); }
       if (dead) this.onKill(b.owner, o, b.owner && b.owner.gun ? b.owner.gun.id : 'gun');
@@ -3244,6 +3408,78 @@ Object.assign(Game, {
   floatText(x, y, txt, col, life) {
     this.texts.push({ x, y, txt, col, life: life || 0.9, max: life || 0.9 });
     if (this.texts.length > 40) this.texts.shift();
+  },
+
+  /** Marker ueber sichtbaren Gegnern. Ein Pool aus DOM-Elementen ist hier
+      billiger und schaerfer als Text im WebGL-Bild, und er dreht mit der
+      Buehne mit, weil er im HUD haengt. */
+  updateMarks() {
+    if (!this.v3 || !this.opts.marks) {
+      if (this.markPool) for (const m of this.markPool) m.el.style.display = 'none';
+      return;
+    }
+    if (!this.markPool) {
+      this.markPool = [];
+      for (let i = 0; i < 10; i++) {
+        const el = document.createElement('div');
+        el.className = 'mk';
+        el.innerHTML = '<b></b><i><s></s></i><u></u>';
+        el.style.display = 'none';
+        this.el.marks.appendChild(el);
+        this.markPool.push({ el, name: el.querySelector('b'), bar: el.querySelector('s'),
+                             wrap: el.querySelector('i'), dist: el.querySelector('u') });
+      }
+    }
+    const p = this.player;
+    const RANGE = 1400;
+    const near = this.aGrid.query(p.x, p.y, RANGE, this._tmp);
+    const list = [];
+    for (let i = 0; i < near.length; i++) {
+      const o = near[i];
+      if (o === p || !o.alive || o.drop.phase !== 'ground') continue;
+      const d = dist(p.x, p.y, o.x, o.y);
+      if (d > RANGE) continue;
+      // nur was man auch sehen koennte: im Blickfeld und ohne Wand davor
+      if (Math.abs(angDiff(p.aimAng, Math.atan2(o.y - p.y, o.x - p.x))) > 0.95) continue;
+      if (World.losBlocked(p.x, p.y, o.x, o.y)) continue;
+      list.push({ o, d });
+    }
+    list.sort((a, b) => a.d - b.d);
+    const out = this._proj || (this._proj = { x: 0, y: 0 });
+    const placed = [];
+    let slot = 0;
+    for (const e of list) {
+      if (slot >= this.markPool.length) break;
+      const pos = R3D.project(e.o.x, BODY_H * 1.12, e.o.y, out);
+      if (!pos || pos.x < -60 || pos.x > this.W + 60 || pos.y < -40 || pos.y > this.H + 40) continue;
+      // Naeheres gewinnt: uebereinanderliegende Namen sind unlesbar
+      let clash = false;
+      for (const q of placed) if (Math.abs(q.x - pos.x) < 66 && Math.abs(q.y - pos.y) < 26) { clash = true; break; }
+      if (clash) continue;
+      placed.push({ x: pos.x, y: pos.y });
+      const m = this.markPool[slot++];
+      m.el.style.display = '';
+      m.el.style.left = pos.x + 'px';
+      m.el.style.top = pos.y + 'px';
+      m.el.classList.toggle('far', e.d > 620);
+      m.el.classList.toggle('sh', e.o.sh > 0);
+      m.name.textContent = e.o.name;
+      m.bar.style.transform = 'scaleX(' + clamp(e.o.sh > 0 ? e.o.sh / e.o.maxSh : e.o.hp / e.o.maxHp, 0, 1) + ')';
+      m.dist.textContent = Math.round(e.d / 50) + ' m';
+      m.el.style.opacity = clamp(1.25 - e.d / RANGE, .35, 1);
+    }
+    for (let i = slot; i < this.markPool.length; i++) this.markPool[i].el.style.display = 'none';
+  },
+
+  /** kurzes Aufblitzen am Fadenkreuz — die einzige verlaessliche Rueckmeldung,
+      dass ein Schuss in der Ego-Sicht wirklich getroffen hat */
+  hitMark(kill) {
+    const h = this.el.hitm;
+    h.classList.remove('on');
+    void h.offsetWidth;                       // Animation neu starten
+    h.classList.toggle('kill', !!kill);
+    h.classList.add('on');
+    this.hitMarkT = 0.3;
   },
 
   hitFx(x, y, dmg, isMe, victim) {

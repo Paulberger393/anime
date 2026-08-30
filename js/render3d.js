@@ -60,9 +60,28 @@ const R3D = {
     const geo = new THREE.SphereGeometry(4600, 24, 16);
     const mat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { top: { value: new THREE.Color(0x2f6fb8) }, bot: { value: new THREE.Color(0xcfe2f0) } },
-      vertexShader: 'varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'varying float h; uniform vec3 top; uniform vec3 bot; void main(){ gl_FragColor = vec4(mix(bot, top, smoothstep(-0.05, 0.55, h)), 1.0); }'
+      uniforms: { top: { value: new THREE.Color(0x2a6ab5) }, bot: { value: new THREE.Color(0xd6e6f2) },
+                  sunDir: { value: new THREE.Vector3(-0.5, 0.85, 0.28).normalize() } },
+      vertexShader: `varying vec3 vp;
+        void main(){ vp = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+      fragmentShader: `varying vec3 vp; uniform vec3 top; uniform vec3 bot; uniform vec3 sunDir;
+        // billiges Wertrauschen — reicht fuer weiche Wolkenbaender
+        float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+          return mix(mix(h21(i), h21(i+vec2(1,0)), f.x), mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), f.x), f.y); }
+        void main(){
+          vec3 c = mix(bot, top, smoothstep(-0.05, 0.55, vp.y));
+          float sun = max(dot(vp, sunDir), 0.0);
+          c += vec3(1.0, 0.86, 0.62) * pow(sun, 220.0) * 1.4;      // Sonnenscheibe
+          c += vec3(1.0, 0.82, 0.58) * pow(sun, 5.0) * 0.16;       // Hof drumherum
+          if (vp.y > 0.02) {
+            vec2 uv = vp.xz / max(vp.y, 0.05) * 0.55;
+            float n = noise(uv * 1.6) * 0.6 + noise(uv * 3.7) * 0.3 + noise(uv * 8.0) * 0.1;
+            float cl = smoothstep(0.52, 0.78, n) * smoothstep(0.02, 0.30, vp.y);
+            c = mix(c, vec3(1.0, 0.99, 0.97), cl * 0.75);
+          }
+          gl_FragColor = vec4(c, 1.0);
+        }`
     });
     this.sky = new THREE.Mesh(geo, mat);
     this.sky.frustumCulled = false;
@@ -209,6 +228,8 @@ const R3D = {
     this.dyn.body = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXA);
     this.dyn.head = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXA);
     this.dyn.gun  = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0x2b2f38), MAXA);
+    this.dyn.arm  = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0xffffff), MAXA * 2);
+    this.dyn.leg  = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lam(0x39435c), MAXA * 2);
     const disc = new THREE.CircleGeometry(1, 12); disc.rotateX(-Math.PI / 2);
     this.dyn.shadow = new THREE.InstancedMesh(disc,
       new THREE.MeshBasicMaterial({ color: 0x101c10, transparent: true, opacity: .34, depthWrite: false }), MAXA);
@@ -268,24 +289,56 @@ const R3D = {
     this.scene.add(this.storm);
   },
 
-  /** Waffe am unteren Bildrand — verkauft die Ego-Perspektive */
+  /** Waffe am unteren Bildrand — verkauft die Ego-Perspektive.
+      Schlank und weit aussen: der erste Entwurf war ein 68 cm langer Klotz
+      mitten im Bild und hat ein Drittel der Sicht verdeckt. */
   buildViewModel() {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(7, 7, 34), new THREE.MeshLambertMaterial({ color: 0x33383f }));
-    body.position.set(0, 0, -14);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.7, 22, 6), new THREE.MeshLambertMaterial({ color: 0x22262c }));
-    barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 1.4, -34);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(5.5, 12, 6), new THREE.MeshLambertMaterial({ color: 0x4a3524 }));
-    grip.position.set(0, -7, -6); grip.rotation.x = -0.22;
-    g.add(body, barrel, grip);
-    g.position.set(11, -9, -20);
+    const dark = new THREE.MeshLambertMaterial({ color: 0x2e343d });
+    const grey = new THREE.MeshLambertMaterial({ color: 0x454c57 });
+    const wood = new THREE.MeshLambertMaterial({ color: 0x54402a });
+
+    const receiver = new THREE.Mesh(new THREE.BoxGeometry(4.6, 5.4, 19), grey);
+    receiver.position.set(0, 0, -9);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 17, 6), dark);
+    barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 1.3, -25);
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.4, 1.6), dark);
+    sight.position.set(0, 3.9, -17);
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(3.4, 8.5, 5), dark);
+    mag.position.set(0, -5.4, -8); mag.rotation.x = 0.14;
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(3.8, 9, 4.4), wood);
+    grip.position.set(0, -5.6, 1); grip.rotation.x = -0.30;
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(3.8, 5.2, 9), wood);
+    stock.position.set(0, -1.2, 5);
+    g.add(receiver, barrel, sight, mag, grip, stock);
+
+    // Massstab und Sitz sind gemessen, nicht geraten: das Modell soll rund ein
+    // Viertel der Bildhoehe fuellen und in der unteren rechten Ecke sitzen.
+    g.position.set(12, -10.5, -26);
+    g.rotation.set(0.03, -0.11, 0.06);      // leicht eingedreht, wie gehalten
+    g.scale.setScalar(0.62);
     this.vm = g;
-    this.flash = new THREE.Mesh(new THREE.IcosahedronGeometry(5.5, 0),
+    this.vmBase = { x: 12, y: -10.5, z: -26 };
+
+    this.flash = new THREE.Mesh(new THREE.IcosahedronGeometry(3.4, 0),
       new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0, fog: false }));
-    this.flash.position.set(0, 1.4, -47);
+    this.flash.position.set(0, 1.3, -34);
     g.add(this.flash);
+    this.muzzleLight = new THREE.PointLight(0xffd9a0, 0, 460, 2);
+    this.muzzleLight.position.set(0, 3, -30);
+    g.add(this.muzzleLight);
     this.cam.add(g);
     this.scene.add(this.cam);
+  },
+
+  /** Weltpunkt -> Buehnen-Pixel. null, wenn hinter der Kamera. */
+  project(x, h, z, out) {
+    const v = this._pv || (this._pv = new THREE.Vector3());
+    v.set(x, h, z).project(this.cam);
+    if (v.z > 1) return null;                       // hinter der Kamera
+    out.x = (v.x * 0.5 + 0.5) * Game.W;
+    out.y = (-v.y * 0.5 + 0.5) * Game.H;
+    return out;
   },
 
   resize(w, h, dpr) {
@@ -377,17 +430,20 @@ Object.assign(R3D, {
     this.vm.visible = !air && p.alive && Game.state === 'play';
     const kick = p.muzzle > 0 ? 1 : 0;
     this.vmKick = lerp(this.vmKick || 0, kick, dt * (kick ? 40 : 9));
-    this.vm.position.set(11 - (Input.move.mag > .1 ? Math.sin(this.bobT) * 1.6 : 0),
-                         -9 + (Input.move.mag > .1 ? Math.cos(this.bobT * 2) * .9 : 0) - this.vmKick * 1.2,
-                         -20 + this.vmKick * 5);
-    this.vm.rotation.x = this.vmKick * 0.16;
-    this.vm.scale.setScalar(g ? 1 : 0.62);
+    const vb = this.vmBase, walking = Input.move.mag > .1;
+    this.vm.position.set(vb.x - (walking ? Math.sin(this.bobT) * 1.3 : 0),
+                         vb.y + (walking ? Math.cos(this.bobT * 2) * .8 : 0) - this.vmKick * 1.1,
+                         vb.z + this.vmKick * 4);
+    this.vm.rotation.set(0.03 + this.vmKick * 0.17, -0.09, 0.05);
+    this.vm.scale.setScalar(g ? 0.62 : 0.4);
     this.flash.material.opacity = p.muzzle > 0 ? 0.95 : 0;
     this.flash.scale.setScalar(p.muzzle > 0 ? rnd(0.7, 1.4) : 1);
+    this.muzzleLight.intensity = p.muzzle > 0 ? 4.2 : 0;
   },
 
   updateActors(p) {
     const body = this.dyn.body, head = this.dyn.head, gun = this.dyn.gun, sh = this.dyn.shadow;
+    const arm = this.dyn.arm, leg = this.dyn.leg;
     const M = this.mat4, Q = this.quat, E = this.eul, P = this.v3, S = this.sc, C = this.col;
     let n = 0;
     const far2 = 2600 * 2600;
@@ -402,19 +458,47 @@ Object.assign(R3D, {
       C.set(a.hurtT > 0 ? '#ffffff' : hex);
 
       E.set(0, -a.aimAng - Math.PI / 2, 0); Q.setFromEuler(E);
-      P.set(a.x, base + BODY_H * 0.42, a.y); S.set(30, BODY_H * .62, 20);
+      const c = Math.cos(a.aimAng), s2 = Math.sin(a.aimAng);
+      const rx = -s2, rz = c;                       // Rechtsvektor der Figur
+      // Schrittzyklus: laufende Gegner sollen sich auch von weitem bewegen
+      const sp = Math.hypot(a.vx || 0, a.vy || 0);
+      a.step = (a.step || 0) + (a.lastX === undefined ? 0
+                : dist(a.x, a.y, a.lastX, a.lastY) * 0.055);
+      a.lastX = a.x; a.lastY = a.y;
+      const sw = Math.sin(a.step) * 9, sw2 = -sw;
+
+      P.set(a.x, base + BODY_H * 0.56, a.y); S.set(26, BODY_H * .40, 17);
       M.compose(P, Q, S); body.setMatrixAt(n, M); body.setColorAt(n, C);
 
-      P.set(a.x, base + BODY_H * 0.87, a.y); S.set(17, 17, 17);
+      P.set(a.x, base + BODY_H * 0.86, a.y); S.set(17, 17, 17);
       M.compose(P, Q, S); head.setMatrixAt(n, M);
       C.set(a.hurtT > 0 ? '#ffffff' : '#e0b189');
       head.setColorAt(n, C);
+
+      // Arme links und rechts, der rechte nach vorn an die Waffe
+      for (let k = 0; k < 2; k++) {
+        const side = k ? 1 : -1;
+        P.set(a.x + rx * side * 17 + c * (k ? 8 : 0),
+              base + BODY_H * 0.56,
+              a.y + rz * side * 17 + s2 * (k ? 8 : 0));
+        S.set(8, BODY_H * 0.34, 8);
+        M.compose(P, Q, S); arm.setMatrixAt(n * 2 + k, M);
+        arm.setColorAt(n * 2 + k, C);
+      }
+      // Beine mit Schrittbewegung
+      for (let k = 0; k < 2; k++) {
+        const side = k ? 1 : -1, off = k ? sw : sw2;
+        P.set(a.x + rx * side * 7 + c * off * 0.5,
+              base + BODY_H * 0.19,
+              a.y + rz * side * 7 + s2 * off * 0.5);
+        S.set(9, BODY_H * 0.38, 9);
+        M.compose(P, Q, S); leg.setMatrixAt(n * 2 + k, M);
+      }
       C.set(a.hurtT > 0 ? '#ffffff' : hex);
 
       // Waffe waagerecht vor der Brust in Blickrichtung
-      const c = Math.cos(a.aimAng), s2 = Math.sin(a.aimAng);
-      P.set(a.x + c * 20, base + BODY_H * 0.62, a.y + s2 * 20);
-      S.set(a.gun ? 30 : 14, 6, 6);
+      P.set(a.x + c * 22 + rx * 9, base + BODY_H * 0.58, a.y + s2 * 22 + rz * 9);
+      S.set(a.gun ? 32 : 14, 5.5, 5.5);
       M.compose(P, Q, S); gun.setMatrixAt(n, M);
 
       P.set(a.x, base + 1.5, a.y); S.set(22, 1, 22);
@@ -424,6 +508,11 @@ Object.assign(R3D, {
     }
     for (const m of [body, head, gun, sh]) {
       m.count = n;
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    }
+    for (const m of [arm, leg]) {
+      m.count = n * 2;
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }

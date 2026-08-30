@@ -240,6 +240,7 @@ const Input = {
       stick.ox = stick.cx = s.x; stick.oy = stick.cy = s.y;
       stick.px = s.x; stick.py = s.y;                  // fuer das Blick-Delta
       stick.x = stick.y = stick.mag = 0;
+      stick.tStart = performance.now(); stick.moved = 0;
     }
   },
 
@@ -260,6 +261,7 @@ const Input = {
         // Auslenkung: gezogen wird wie mit einer Maus, nicht wie an einem Stick.
         s.dxA = (s.dxA || 0) + (q.x - (s.px === undefined ? q.x : s.px));
         s.dyA = (s.dyA || 0) + (q.y - (s.py === undefined ? q.y : s.py));
+        s.moved = (s.moved || 0) + Math.abs(q.x - s.px) + Math.abs(q.y - s.py);
         s.px = q.x; s.py = q.y;
         s.cx = q.x; s.cy = q.y;
         const m = Math.min(1, Math.hypot(dx, dy) / this.R);
@@ -281,7 +283,11 @@ const Input = {
         delete this.touchAct[t.identifier];
       }
       for (const s of [this.move, this.aim]) {
-        if (s.id === t.identifier) { s.id = null; s.active = false; s.x = s.y = s.mag = 0; s.px = s.py = undefined; }
+        if (s.id !== t.identifier) continue;
+        // kurzer, fast bewegungsloser Kontakt im Blickbereich = Schuss
+        if (s === this.aim && this.tapFire && s.moved < 14 &&
+            performance.now() - (s.tStart || 0) < 260) this.tapped.tapshot = true;
+        s.id = null; s.active = false; s.x = s.y = s.mag = 0; s.px = s.py = undefined;
       }
     }
   },

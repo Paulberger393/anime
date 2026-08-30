@@ -46,10 +46,10 @@ body.quer2 #stage{width:100vh;height:100vw;top:100%;left:0;
 /* Thumb-friendly landscape layout: the bottom-left quadrant stays completely
    free for the movement thumb, everything actionable arcs around the right one.
    Buttons sit low because a landscape iPhone is only ~390pt tall. */
-#bFire{width:82px;height:82px;right:14px;bottom:calc(env(safe-area-inset-bottom) + 62px);
+#bFire{width:96px;height:96px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 54px);
   background:rgba(255,72,72,.30);border-color:rgba(255,140,140,.55)}
 #bFire.on{background:rgba(255,72,72,.7)}
-#bFire .ic{font-size:26px}
+#bFire .ic{font-size:30px}
 #bPick  {width:50px;height:50px;right:106px;bottom:calc(env(safe-area-inset-bottom) + 58px)}
 #bReload{width:52px;height:52px;right:104px;bottom:calc(env(safe-area-inset-bottom) + 120px)}
 #bUse   {width:56px;height:56px;right:20px;bottom:calc(env(safe-area-inset-bottom) + 152px);
@@ -138,6 +138,38 @@ body.quer2 #stage{width:100vh;height:100vw;top:100%;left:0;
 #cross i{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;
   background:rgba(0,0,0,.55);box-shadow:0 0 0 1px rgba(255,255,255,.7)}
 #cross.hit::before,#cross.hit::after{background:#ff6b6b}
+#cross.lock::before,#cross.lock::after{background:#ff9d3a;box-shadow:0 0 6px #ff6b2a}
+
+/* Gegnermarker: ohne die findet man in der Ego-Sicht schlicht niemanden. */
+#marks{position:absolute;inset:0;pointer-events:none}
+.mk{position:absolute;transform:translate(-50%,-100%);text-align:center;white-space:nowrap;
+  transition:opacity .12s}
+.mk b{display:block;font-size:10px;font-weight:800;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;
+  letter-spacing:.3px}
+.mk i{display:block;width:44px;height:4px;margin:2px auto 0;border-radius:2px;
+  background:rgba(0,0,0,.6);overflow:hidden}
+.mk i s{display:block;height:100%;background:#4ade80;text-decoration:none;transform-origin:left}
+.mk.sh i s{background:#39c8ff}
+.mk u{display:block;font-size:9px;opacity:.75;text-decoration:none;margin-top:1px;
+  text-shadow:0 1px 3px #000}
+.mk.far b{font-size:9px;opacity:.8}
+.mk.far i{width:30px;height:3px}
+
+/* Trefferbestaetigung: vier Striche, die kurz aufblitzen */
+#hitm{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;
+  pointer-events:none;opacity:0}
+#hitm.on{opacity:1;animation:hitpop .32s ease-out}
+#hitm::before,#hitm::after,#hitm i,#hitm u{content:"";position:absolute;width:12px;height:3px;
+  background:#fff;box-shadow:0 0 4px #000;border-radius:2px}
+#hitm::before{left:0;top:6px;transform:rotate(45deg)}
+#hitm::after{right:0;top:6px;transform:rotate(-45deg)}
+#hitm.kill::before,#hitm.kill::after{background:#ff5252}
+@keyframes hitpop{0%{transform:scale(.6);opacity:1}100%{transform:scale(1.5);opacity:0}}
+@media (prefers-reduced-motion:reduce){#hitm.on{animation:none}}
+
+/* leichte Abdunklung zu den Raendern — nimmt dem Bild das Flache */
+#vign{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 80% at 50% 48%,transparent 45%,rgba(0,0,0,.42) 100%)}
 
 /* Absprung: gross und mittig, weil man im Bus sonst nicht weiss, was zu tun ist */
 #bJump{width:120px;height:120px;left:50%;top:50%;margin:-60px 0 0 -60px;
@@ -208,6 +240,9 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
   <div id="hint" class="hide"></div>
   <div id="dmgFlash"></div>
   <div id="cross"><i></i></div>
+  <div id="marks"></div>
+  <div id="vign"></div>
+  <div id="hitm"><i></i><u></u></div>
   <div class="btn" id="bJump" data-act="jump"><div class="ic">🪂</div><div class="lb">ABSPRINGEN</div></div>
   <div id="alt"></div>
 
@@ -242,6 +277,11 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
     <button class="opt" data-opt="hand">Layout: <b>Rechts</b></button>
     <button class="opt" data-opt="view">Ansicht: <b>Ego 3D</b></button>
     <button class="opt" data-opt="quer">Ausrichtung: <b>Automatisch</b></button>
+    <button class="opt" data-opt="sens">Blick-Tempo: <b>Normal</b></button>
+    <button class="opt" data-opt="start">Startwaffe: <b>Pistole</b></button>
+    <button class="opt" data-opt="marks">Gegner-Marker: <b>An</b></button>
+    <button class="opt" data-opt="tapfire">Tippen = Schuss: <b>An</b></button>
+    <button class="opt" data-opt="autorun">Auto-Sprint: <b>An</b></button>
     <button class="opt" data-opt="quality">Grafik: <b>Auto</b></button>
   </div>
   <div id="stats"></div>

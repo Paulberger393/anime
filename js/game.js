@@ -21,7 +21,7 @@ const Game = {
 
   opts: {
     bots: 100, diff: 'normal', autofire: true, aim: 2,
-    speed: 1, sound: true, hand: 0, quality: 0, view: 1, sens: 1, quer: 0
+    speed: 1, sound: true, hand: 0, quality: 0, view: 1, sens: 1, quer: 0, start: 1, marks: 1, tapfire: 1, autorun: 1
   },
 
   /* ------------------------------------------------------ boot */
@@ -42,6 +42,8 @@ const Game = {
       alive: document.getElementById('alive'), storm: document.getElementById('storm'), kills: document.getElementById('kills'),
       feed: document.getElementById('feed'), toast: document.getElementById('toast'), hint: document.getElementById('hint'),
       flash: document.getElementById('dmgFlash'), buildBar: document.getElementById('buildBar'),
+      cross: document.getElementById('cross'), marks: document.getElementById('marks'),
+      hitm: document.getElementById('hitm'),
       jump: document.getElementById('bJump'), alt: document.getElementById('alt'),
       stats: document.getElementById('stats'), res: document.getElementById('res'),
       resT: document.getElementById('resT'), resS: document.getElementById('resS')
@@ -51,6 +53,7 @@ const Game = {
     this.buildSlots();          // must exist before Input caches hitboxes
     Input.init();
     Input.leftHanded = this.opts.hand === 1;
+    Input.tapFire = !!this.opts.tapfire;
     this.resize();
     addEventListener('resize', () => this.applyRotation());
     addEventListener('orientationchange', () => setTimeout(() => this.applyRotation(), 300));
@@ -123,6 +126,11 @@ const Game = {
       case 'hand': o.hand = o.hand ? 0 : 1; Input.leftHanded = o.hand === 1; break;
       case 'view': o.view = o.view ? 0 : 1; this.applyView(); break;
       case 'quer': o.quer = (o.quer + 1) % 3; this.applyRotation(); break;
+      case 'sens': o.sens = o.sens >= 1.6 ? 0.6 : +(o.sens + 0.2).toFixed(1); break;
+      case 'start': o.start = o.start ? 0 : 1; break;
+      case 'marks': o.marks = o.marks ? 0 : 1; break;
+      case 'tapfire': o.tapfire = o.tapfire ? 0 : 1; Input.tapFire = !!o.tapfire; break;
+      case 'autorun': o.autorun = o.autorun ? 0 : 1; break;
       case 'quality': o.quality = (o.quality + 1) % 3; this.resize(); break;
     }
     Store.data.opts = o; Store.save();
@@ -140,7 +148,13 @@ const Game = {
       hand: o.hand ? 'Links' : 'Rechts',
       quality: ['Auto', 'Hoch', 'Sparsam'][o.quality],
       view: o.view ? 'Ego 3D' : 'Top-Down',
-      quer: ['Automatisch', 'Quer ↺', 'Quer ↻'][o.quer]
+      quer: ['Automatisch', 'Quer ↺', 'Quer ↻'][o.quer],
+      sens: o.sens <= 0.7 ? 'Sehr langsam' : o.sens <= 0.9 ? 'Langsam' : o.sens <= 1.1 ? 'Normal'
+          : o.sens <= 1.3 ? 'Schnell' : 'Sehr schnell',
+      start: o.start ? 'Pistole' : 'Ohne',
+      marks: o.marks ? 'An' : 'Aus',
+      tapfire: o.tapfire ? 'An' : 'Aus',
+      autorun: o.autorun ? 'An' : 'Aus'
     };
     document.querySelectorAll('.opt').forEach(b => {
       const k = b.dataset.opt;
@@ -240,6 +254,7 @@ const Game = {
     document.getElementById('bBuild').classList.remove('on');
 
     this.el.hint.classList.add('hide');
+    if (this.markPool) for (const m of this.markPool) m.el.style.display = 'none';
     this.el.toast.classList.remove('show');
     this.el.flash.style.opacity = 0;
     this.el.menu.classList.add('hide');
@@ -323,6 +338,7 @@ const Game = {
     World.cleanup();
     this.reapDead();
     this.updateHUD();
+    if (this.state === 'play') this.updateMarks();
   },
 
   /* ------------------------------------------------------ bus & drop */
@@ -422,6 +438,13 @@ const Game = {
       a.state = a.isBot ? 'loot' : 'play';
       if (a === this.player) {
         this.state = 'play';
+        // Eine Startpistole macht den Unterschied zwischen "ich werde erschossen,
+        // bevor ich etwas finde" und "ich kann mich wehren".
+        if (this.opts.start && !a.gun) {
+          const g = makeGun('pistol', 0);
+          a.slots[0] = g; a.sel = 0; a.addAmmo('light', 72);
+          this.updateSlots();
+        }
         this.el.alt.textContent = '';
         this.el.jump.classList.add('hide');
         document.getElementById('cross').classList.toggle('hide', !this.v3);
@@ -502,9 +525,12 @@ const Game = {
     if (p.reloadT > 0) { p.reloadT -= dt; if (p.reloadT <= 0) this.finishReload(p); }
 
     // --- movement + aiming
-    const sprint = Input.btn.sprint ? 1.34 : 1;
     const mv = Input.move;
-    let firing = Input.btn.fire;
+    // Auto-Sprint: wer den Stick voll durchdrueckt, will rennen. Spart einen
+    // Knopf, den man auf dem Handy ohnehin kaum halten kann.
+    const auto = this.opts.autorun && mv.mag > 0.92 && this.v3 && p.healT <= 0;
+    const sprint = (Input.btn.sprint || auto) ? 1.34 : 1;
+    let firing = Input.btn.fire || Input.tap('tapshot');
 
     if (this.v3) {
       // Ego: der rechte Finger dreht den Kopf (Wisch = Maus), der linke laeuft
@@ -518,15 +544,16 @@ const Game = {
 
       const lock = this.aimAssist(p, p.aimAng);
       if (lock) {
-        const strength = [0, 0.22, 0.44][this.opts.aim] * dt * 12;
-        p.aimAng = angApproach(p.aimAng, lock.ang, Math.abs(angDiff(p.aimAng, lock.ang)) * clamp(strength, 0, 1));
-        const dy = (lock.actor.y3 || BODY_H * 0.6) - EYE;
-        p.pitch = lerp(p.pitch, Math.atan2(dy, lock.d), clamp(strength, 0, 1));
-        if (this.opts.autofire && Math.abs(angDiff(p.aimAng, lock.ang)) < 0.12) firing = true;
+        const strength = [0, 0.35, 0.7][this.opts.aim] * dt * 14;
+        const k = clamp(strength, 0, 1);
+        p.aimAng = angApproach(p.aimAng, lock.ang, Math.abs(angDiff(p.aimAng, lock.ang)) * k);
+        const dy = BODY_H * 0.58 - EYE;
+        p.pitch = lerp(p.pitch, Math.atan2(dy, Math.max(40, lock.d)), k);
+        // Grosszuegiger als vorher: 0.12 rad traf bei laufenden Zielen fast nie.
+        if (this.opts.autofire && Math.abs(angDiff(p.aimAng, lock.ang)) < 0.22) firing = true;
       }
       p.ang = p.aimAng;
-      this.el.crossHit = lock;
-      document.getElementById('cross').classList.toggle('hit', !!lock);
+      this.el.cross.classList.toggle('lock', !!lock);
 
       if (mv.mag > 0) {
         const c = Math.cos(p.aimAng), sn = Math.sin(p.aimAng);
@@ -595,7 +622,7 @@ const Game = {
       if (d > range) continue;
       const a = Math.atan2(o.y - p.y, o.x - p.x);
       const off = Math.abs(angDiff(ang, a));
-      if (off > 0.42) continue;                      // ~24° cone
+      if (off > (this.v3 ? 0.34 : 0.42)) continue;    // Zielkegel
       if (World.losBlocked(p.x, p.y, o.x, o.y)) continue;
       const score = off * 300 + d;
       if (score < bs) { bs = score; best = { ang: a, actor: o, d }; }
@@ -693,6 +720,7 @@ const Game = {
     if (!best) return;
     const dead = best.hurt(18, a);
     this.hitFx(best.x, best.y, 18, best === this.player, best);
+    if (a === this.player) this.hitMark(dead);
     if (dead) this.onKill(a, best, 'melee');
   },
 
@@ -778,6 +806,7 @@ const Game = {
       if (b.rocket) { this.explode(b.x, b.y, b); return true; }
       const dead = o.hurt(b.dmg, b.owner);
       this.hitFx(b.x, b.y, b.dmg, o === this.player, o);
+      if (b.owner === this.player) this.hitMark(dead);
       Snd.play('hit', b.owner === this.player ? 0.9 : this.volAt(b.x, b.y) * .5);
       if (o === this.player) { this.flash(0.55); Snd.play('hurt', .9); }
       if (dead) this.onKill(b.owner, o, b.owner && b.owner.gun ? b.owner.gun.id : 'gun');
@@ -1144,6 +1173,78 @@ Object.assign(Game, {
   floatText(x, y, txt, col, life) {
     this.texts.push({ x, y, txt, col, life: life || 0.9, max: life || 0.9 });
     if (this.texts.length > 40) this.texts.shift();
+  },
+
+  /** Marker ueber sichtbaren Gegnern. Ein Pool aus DOM-Elementen ist hier
+      billiger und schaerfer als Text im WebGL-Bild, und er dreht mit der
+      Buehne mit, weil er im HUD haengt. */
+  updateMarks() {
+    if (!this.v3 || !this.opts.marks) {
+      if (this.markPool) for (const m of this.markPool) m.el.style.display = 'none';
+      return;
+    }
+    if (!this.markPool) {
+      this.markPool = [];
+      for (let i = 0; i < 10; i++) {
+        const el = document.createElement('div');
+        el.className = 'mk';
+        el.innerHTML = '<b></b><i><s></s></i><u></u>';
+        el.style.display = 'none';
+        this.el.marks.appendChild(el);
+        this.markPool.push({ el, name: el.querySelector('b'), bar: el.querySelector('s'),
+                             wrap: el.querySelector('i'), dist: el.querySelector('u') });
+      }
+    }
+    const p = this.player;
+    const RANGE = 1400;
+    const near = this.aGrid.query(p.x, p.y, RANGE, this._tmp);
+    const list = [];
+    for (let i = 0; i < near.length; i++) {
+      const o = near[i];
+      if (o === p || !o.alive || o.drop.phase !== 'ground') continue;
+      const d = dist(p.x, p.y, o.x, o.y);
+      if (d > RANGE) continue;
+      // nur was man auch sehen koennte: im Blickfeld und ohne Wand davor
+      if (Math.abs(angDiff(p.aimAng, Math.atan2(o.y - p.y, o.x - p.x))) > 0.95) continue;
+      if (World.losBlocked(p.x, p.y, o.x, o.y)) continue;
+      list.push({ o, d });
+    }
+    list.sort((a, b) => a.d - b.d);
+    const out = this._proj || (this._proj = { x: 0, y: 0 });
+    const placed = [];
+    let slot = 0;
+    for (const e of list) {
+      if (slot >= this.markPool.length) break;
+      const pos = R3D.project(e.o.x, BODY_H * 1.12, e.o.y, out);
+      if (!pos || pos.x < -60 || pos.x > this.W + 60 || pos.y < -40 || pos.y > this.H + 40) continue;
+      // Naeheres gewinnt: uebereinanderliegende Namen sind unlesbar
+      let clash = false;
+      for (const q of placed) if (Math.abs(q.x - pos.x) < 66 && Math.abs(q.y - pos.y) < 26) { clash = true; break; }
+      if (clash) continue;
+      placed.push({ x: pos.x, y: pos.y });
+      const m = this.markPool[slot++];
+      m.el.style.display = '';
+      m.el.style.left = pos.x + 'px';
+      m.el.style.top = pos.y + 'px';
+      m.el.classList.toggle('far', e.d > 620);
+      m.el.classList.toggle('sh', e.o.sh > 0);
+      m.name.textContent = e.o.name;
+      m.bar.style.transform = 'scaleX(' + clamp(e.o.sh > 0 ? e.o.sh / e.o.maxSh : e.o.hp / e.o.maxHp, 0, 1) + ')';
+      m.dist.textContent = Math.round(e.d / 50) + ' m';
+      m.el.style.opacity = clamp(1.25 - e.d / RANGE, .35, 1);
+    }
+    for (let i = slot; i < this.markPool.length; i++) this.markPool[i].el.style.display = 'none';
+  },
+
+  /** kurzes Aufblitzen am Fadenkreuz — die einzige verlaessliche Rueckmeldung,
+      dass ein Schuss in der Ego-Sicht wirklich getroffen hat */
+  hitMark(kill) {
+    const h = this.el.hitm;
+    h.classList.remove('on');
+    void h.offsetWidth;                       // Animation neu starten
+    h.classList.toggle('kill', !!kill);
+    h.classList.add('on');
+    this.hitMarkT = 0.3;
   },
 
   hitFx(x, y, dmg, isMe, victim) {

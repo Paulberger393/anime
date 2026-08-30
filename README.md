@@ -46,6 +46,7 @@ Pages ist das automatisch gegeben.
 |---|---|
 | **Links ziehen** (irgendwo linke Bildschirmhälfte) | Laufen — der Stick erscheint unter dem Daumen, Bewegung ist blickrelativ |
 | **Rechts wischen** | Umschauen wie mit einer Maus (Drehen und Neigen); mit Auto-Feuer wird geschossen, sobald jemand im Fadenkreuz ist |
+| **Rechts kurz tippen** | Einzelschuss, ohne den Daumen zum Feuerknopf zu bewegen |
 | **FEUER** | Schießen |
 | **NACHLADEN** | Magazin füllen |
 | **HEILEN** | Bestes Heilitem benutzen (Verband, Medikit, Schild) |
@@ -103,6 +104,12 @@ Bewegung *und* Kugeln und lassen sich zerschießen.
 | **Sound** | An/Aus |
 | **Layout** | Rechts- oder Linkshänder (tauscht Lauf- und Zielstick) |
 | **Ansicht** | **Ego 3D** oder **Top-Down** (die 2D-Ansicht bleibt als Rückfallebene erhalten) |
+| **Ausrichtung** | Automatisch, Quer ↺ oder Quer ↻ — bei aktiver Rotationssperre dreht das Spiel sein Bild selbst |
+| **Blick-Tempo** | Empfindlichkeit des Wischens, fünf Stufen |
+| **Startwaffe** | Pistole beim Landen oder ohne |
+| **Gegner-Marker** | Namen, Lebensbalken und Entfernung über sichtbaren Gegnern |
+| **Tippen = Schuss** | Kurzer Tipp im Blickbereich feuert |
+| **Auto-Sprint** | Voll durchgedrückter Laufstick rennt automatisch |
 | **Grafik** | Auto (max. 2× Pixeldichte) · Hoch · Sparsam — bei älteren iPhones „Sparsam" |
 
 Siege, Kills und Rekorde werden lokal im Gerät gespeichert.
@@ -129,6 +136,12 @@ Die Spielwelt ist weiterhin zweidimensional — das 3D-Bild legt sie nur auf die
 Ebene: Welt-x wird 3D-x, Welt-y wird 3D-z, Höhe ist die neue 3D-y-Achse. Dadurch
 laufen Kollision, KI, Sturm, Loot und Bauen unverändert weiter; getauscht wurden
 Renderer, Kamera und Eingabe. Maßstab: 50 Einheiten sind ein Meter.
+
+In der Ego-Sicht zeigen Marker über sichtbaren Gegnern Namen, Lebensbalken und
+Entfernung — ohne die findet man auf einer 6600 Einheiten großen Insel schlicht
+niemanden. Die Zielhilfe korrigiert Drehung *und* Neigung, ein Treffer blitzt am
+Fadenkreuz auf. Gemessen: schief gezielt und ohne Zielhilfe gehen 14 Schuss fast
+alle daneben (37 Schaden statt 111), mit Zielhilfe treffen sie (222).
 
 Geschosse haben seitdem eine echte Höhe. Nach oben zielen geht über den Gegner
 hinweg, über eine Hauswand hinweg schießen funktioniert, und Baumkronen hängen
