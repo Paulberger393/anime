@@ -387,10 +387,10 @@ const AI = {
     // abstract duel: pick one nearby rival and trade damage
     b.duelT = (b.duelT || 0) - dt;
     if (b.duelT > 0) return;
-    b.duelT = 0.9 + rnd(0.6);
-    if (!chance(0.6)) return;                      // most ticks are cover, reloads, misses
-    const near = G.aGrid.query(b.x, b.y, 260, G._tmp);
-    let foe = null, bd = 260 * 260;
+    b.duelT = 0.8 + rnd(0.5);
+    if (!chance(0.7)) return;                      // most ticks are cover, reloads, misses
+    const near = G.aGrid.query(b.x, b.y, 430, G._tmp);
+    let foe = null, bd = 430 * 430;
     for (let i = 0; i < near.length; i++) {
       const o = near[i];
       if (o === b || !o.alive || !o.isBot) continue;
@@ -400,7 +400,7 @@ const AI = {
     if (!foe) return;
     const g = this.bestGun(b);
     const dps = (g ? gunScore(g, b) * 0.06 : 5) * this.D.acc * b.skill * this.D.dmg;
-    const dmg = dps * 0.42 * (0.6 + Math.random() * 0.8);
+    const dmg = dps * 0.62 * (0.6 + Math.random() * 0.8);
     if (foe.hurt(dmg, b)) G.onKill(b, foe, g ? g.id : 'melee');
     if (b.eff < 40 && chance(0.5)) {                       // far bots heal off-screen too
       const i2 = this.findHeal(b, true);

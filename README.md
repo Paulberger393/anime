@@ -142,19 +142,26 @@ Einheiten unbrauchbar grob, deshalb folgt eine enge Ortho-Kamera von 1300
 Einheiten dem Spieler, und nur Kulissen-Chunks im Umkreis von 1500 Einheiten
 werfen überhaupt.
 
+Die Insel misst 8600 Einheiten (172 m) im Quadrat, mit bis zu 36 benannten
+Orten. Requisiten und Beute skalieren mit der Fläche mit, und die Fern-Simulation
+der Bots ist darauf nachkalibriert — auf der größeren Karte ist fast jeder Bot
+„fern", und die alte Einstellung tötete dort viel zu langsam.
+
 Der Boden ist eine unterteilte Ebene mit Scheitelfarben — Wiesen, trockene
 Flecken, Trampelpfade und ein Sandsaum am Inselrand. Wald gibt es in drei Arten
 (Laubbaum, Fichte, abgestorbener Stamm), Häuser haben Dächer und fünf
 Wandfarben, aus der Position abgeleitet, damit sie über Neustarts stabil bleiben.
 
-Figuren bestehen aus einem kleinen Skelett — Kopf mit Mütze, Brustkorb, Hüfte,
-Rucksack, acht Gliedmaßensegmente mit Schrittzyklus, Hände und Stiefel. Jedes
+Figuren bestehen aus einem Skelett aus runden Grundkörpern: kugeliger Kopf,
+Mütze mit Schirm, Hals, sich verjüngender Brustkorb, Hüfte, Rucksack, acht
+zylindrische Gliedmaßensegmente mit Schrittzyklus und Kugelgelenken an Schulter,
+Ellbogen, Hüfte und Knie, dazu Hände und Stiefel. Jedes
 Körperteil ist ein InstancedMesh, also je ein Zeichenaufruf für alle Figuren
 zusammen. Bewaffnete greifen mit beiden Armen nach vorn an die Waffe,
 Unbewaffnete lassen die Arme gegenläufig zu den Beinen pendeln.
 
-Waffen gibt es als richtige Modelle aus Verschluss, Lauf und Magazin, deren Maße
-je Typ variieren — langer dünner Lauf beim Scharfschützengewehr, kurz und dick
+Waffen gibt es als Modelle aus Verschluss, Lauf, Magazin, Schaft, Griff und —
+wo es hingehört — Zielfernrohr, deren Maße je Typ variieren — langer dünner Lauf beim Scharfschützengewehr, kurz und dick
 bei der Schrotflinte. Dieselben Meshes tragen die Waffe in der Hand und die am
 Boden liegende, damit ein Gewehr überall gleich aussieht. Die Waffe am unteren
 Bildrand skaliert nach denselben Maßen und färbt ihren Verschluss in der

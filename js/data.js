@@ -67,8 +67,8 @@ const BUILD_KINDS = {
    late-game camping in the purple is never viable. Times are scaled by the
    match-pace setting (Schnell = ~0.55x). */
 const STORM_PHASES = [
-  { wait: 32, move: 30, shrink: 0.62, dps: 1 },
-  { wait: 26, move: 26, shrink: 0.62, dps: 2 },
+  { wait: 42, move: 36, shrink: 0.58, dps: 1 },
+  { wait: 30, move: 30, shrink: 0.60, dps: 2 },
   { wait: 22, move: 22, shrink: 0.60, dps: 4 },
   { wait: 18, move: 20, shrink: 0.58, dps: 6 },
   { wait: 15, move: 17, shrink: 0.56, dps: 8 },

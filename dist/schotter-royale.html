@@ -709,8 +709,8 @@ const BUILD_KINDS = {
    late-game camping in the purple is never viable. Times are scaled by the
    match-pace setting (Schnell = ~0.55x). */
 const STORM_PHASES = [
-  { wait: 32, move: 30, shrink: 0.62, dps: 1 },
-  { wait: 26, move: 26, shrink: 0.62, dps: 2 },
+  { wait: 42, move: 36, shrink: 0.58, dps: 1 },
+  { wait: 30, move: 30, shrink: 0.60, dps: 2 },
   { wait: 22, move: 22, shrink: 0.60, dps: 4 },
   { wait: 18, move: 20, shrink: 0.58, dps: 6 },
   { wait: 15, move: 17, shrink: 0.56, dps: 8 },
@@ -806,7 +806,7 @@ function rollConsum() {
    SCHOTTER ROYALE — world: island generation, spatial grid, loot
    ============================================================ */
 
-const MAP = 6600;                // world is MAP x MAP px
+const MAP = 8600;                // world is MAP x MAP px
 const CELL = 200;                // spatial-hash cell size
 
 /* ------------------------------------------------------------
@@ -871,7 +871,7 @@ const World = {
     for (let i = names.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [names[i], names[j]] = [names[j], names[i]]; }
 
     // --- named locations on a jittered 3x3..4x4 lattice, plus a big centre one
-    const N = 5, pad = 640, step = (MAP - pad * 2) / (N - 1);
+    const N = 6, pad = 700, step = (MAP - pad * 2) / (N - 1);
     let ni = 0;
     for (let gy = 0; gy < N; gy++) {
       for (let gx = 0; gx < N; gx++) {
@@ -947,7 +947,7 @@ const World = {
 
   scatter(R) {
     // forests: clumped trees away from town centres
-    for (let i = 0; i < 190; i++) {
+    for (let i = 0; i < 320; i++) {
       const cx = 200 + R() * (MAP - 400), cy = 200 + R() * (MAP - 400);
       const n = 3 + ((R() * 8) | 0);
       for (let j = 0; j < n; j++) {
@@ -957,7 +957,7 @@ const World = {
         this.props.push(this.prop(R, x, y, 'tree'));
       }
     }
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 430; i++) {
       const x = 100 + R() * (MAP - 200), y = 100 + R() * (MAP - 200);
       if (this.nearBuilding(x, y, 40)) continue;
       this.props.push(this.prop(R, x, y, R() < 0.65 ? 'rock' : 'crate'));
@@ -965,7 +965,7 @@ const World = {
   },
 
   floorLoot(R) {
-    for (let i = 0; i < 300; i++) {
+    for (let i = 0; i < 470; i++) {
       const p = this.pois[(R() * this.pois.length) | 0];
       const a = R() * TAU, d = R() * p.r * 1.15;
       const x = clamp(p.x + Math.cos(a) * d, 60, MAP - 60);
@@ -977,7 +977,7 @@ const World = {
       else it = this.ammoItem();
       this.loot.push(this.item(x, y, it));
     }
-    for (let i = 0; i < 120; i++) {              // sparse loot in the wilderness
+    for (let i = 0; i < 200; i++) {              // sparse loot in the wilderness
       const x = 120 + R() * (MAP - 240), y = 120 + R() * (MAP - 240);
       this.loot.push(this.item(x, y, R() < 0.4 ? rollWeapon(0) : this.ammoItem()));
     }
@@ -1546,10 +1546,10 @@ const AI = {
     // abstract duel: pick one nearby rival and trade damage
     b.duelT = (b.duelT || 0) - dt;
     if (b.duelT > 0) return;
-    b.duelT = 0.9 + rnd(0.6);
-    if (!chance(0.6)) return;                      // most ticks are cover, reloads, misses
-    const near = G.aGrid.query(b.x, b.y, 260, G._tmp);
-    let foe = null, bd = 260 * 260;
+    b.duelT = 0.8 + rnd(0.5);
+    if (!chance(0.7)) return;                      // most ticks are cover, reloads, misses
+    const near = G.aGrid.query(b.x, b.y, 430, G._tmp);
+    let foe = null, bd = 430 * 430;
     for (let i = 0; i < near.length; i++) {
       const o = near[i];
       if (o === b || !o.alive || !o.isBot) continue;
@@ -1559,7 +1559,7 @@ const AI = {
     if (!foe) return;
     const g = this.bestGun(b);
     const dps = (g ? gunScore(g, b) * 0.06 : 5) * this.D.acc * b.skill * this.D.dmg;
-    const dmg = dps * 0.42 * (0.6 + Math.random() * 0.8);
+    const dmg = dps * 0.62 * (0.6 + Math.random() * 0.8);
     if (foe.hurt(dmg, b)) G.onKill(b, foe, g ? g.id : 'melee');
     if (b.eff < 40 && chance(0.5)) {                       // far bots heal off-screen too
       const i2 = this.findHeal(b, true);
@@ -1589,13 +1589,13 @@ const EYE = 82;                     // Augenhöhe (~1,65 m)
 const BODY_H = 92;                  // Körperhöhe eines Spielers
 const WALL_H = 170;                 // Höhe der Hauswände
 const BUILT_H = 150;                // Höhe gebauter Wände
-const CHUNK = 1100;                 // Kantenlänge eines Kulissen-Chunks
+const CHUNK = 1450;                 // Kantenlänge eines Kulissen-Chunks
 
 /* Masse der Waffenmodelle in Welteinheiten (50 = 1 m). Die Silhouette soll
    den Typ auf Distanz verraten: langer duenner Lauf = Scharfschuetze,
    kurz und dick = Schrotflinte. */
 const GUN_SHAPE = {
-  pistol:  { body: [11, 5.0, 3.6], barrel: [0.9,  5], mag: [2.6, 6, 2.6], grip: 0.55 },
+  pistol:  { body: [11, 5.0, 3.6], barrel: [0.9,  5], mag: [2.6, 6, 2.6], grip: 0.55, stock: 0 },
   smg:     { body: [15, 5.2, 3.8], barrel: [0.9,  7], mag: [2.8, 9, 2.8], grip: 0.5 },
   tac:     { body: [18, 5.2, 3.8], barrel: [0.9,  9], mag: [2.8, 9, 2.8], grip: 0.5 },
   ar:      { body: [21, 5.4, 4.0], barrel: [1.0, 13], mag: [3.2, 10, 3.0], grip: 0.5 },
@@ -1642,7 +1642,10 @@ const R3D = {
     this.scene.add(this.sunTarget);
     sun.target = this.sunTarget;
     this.scene.add(sun);
-    this.scene.add(new THREE.HemisphereLight(0xa8ccf5, 0x3e5230, 0.48));
+    this.scene.add(new THREE.HemisphereLight(0xa8ccf5, 0x4a6038, 0.62));
+    // Etwas Grundhelligkeit: seit dem Schattenwurf waren Unterseiten — etwa
+    // eine Baumkrone ueber dem Kopf — pechschwarz statt nur dunkel.
+    this.scene.add(new THREE.AmbientLight(0x8fa6c4, 0.16));
 
     this.buildSky();
     this.buildGround();
@@ -1897,13 +1900,19 @@ const R3D = {
        Haende und Stiefel. Jedes Teil ist ein InstancedMesh, also je ein
        Zeichenaufruf fuer alle Figuren zusammen. */
     const box = () => new THREE.BoxGeometry(1, 1, 1);
-    this.dyn.torso = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA);
-    this.dyn.hips  = new THREE.InstancedMesh(box(), lam(0x39435c), MAXA);
-    this.dyn.head  = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA);
+    /* Runde Grundkoerper statt Quader: der Rumpf verjuengt sich, Gliedmassen
+       sind Zylinder und an jedem Gelenk sitzt eine Kugel, die den Uebergang
+       verdeckt. Das ist der Unterschied zwischen Klotz und Figur. */
+    this.dyn.torso = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.46, 0.40, 1, 12), lam(0xffffff), MAXA);
+    this.dyn.hips  = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.44, 0.46, 1, 10), lam(0x39435c), MAXA);
+    this.dyn.neck  = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 8), lam(0xffffff), MAXA);
+    this.dyn.head  = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 1), lam(0xffffff), MAXA);
     this.dyn.pack  = new THREE.InstancedMesh(box(), lam(0x5d6440), MAXA);
-    this.dyn.cap   = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA);
-    this.dyn.limb  = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA * 8);
-    this.dyn.hand  = new THREE.InstancedMesh(box(), lam(0xe0b189), MAXA * 2);
+    this.dyn.cap   = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.52, 0.5, 1, 12), lam(0xffffff), MAXA);
+    this.dyn.brim  = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 12, 1, false, 0, Math.PI), lam(0xffffff), MAXA);
+    this.dyn.limb  = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.42, 1, 8), lam(0xffffff), MAXA * 8);
+    this.dyn.joint = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 0), lam(0xffffff), MAXA * 8);
+    this.dyn.hand  = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 0), lam(0xe0b189), MAXA * 2);
     this.dyn.boot  = new THREE.InstancedMesh(box(), lam(0x2c2a26), MAXA * 2);
     const disc = new THREE.CircleGeometry(1, 12); disc.rotateX(-Math.PI / 2);
     this.dyn.shadow = new THREE.InstancedMesh(disc,
@@ -1915,6 +1924,9 @@ const R3D = {
     this.dyn.gunBody = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA + 260);
     this.dyn.gunBarrel = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 6), lam(0x23262c), MAXA + 260);
     this.dyn.gunMag  = new THREE.InstancedMesh(box(), lam(0x2a2e35), MAXA + 260);
+    this.dyn.gunStock = new THREE.InstancedMesh(box(), lam(0x53412c), MAXA + 260);
+    this.dyn.gunGrip  = new THREE.InstancedMesh(box(), lam(0x33383f), MAXA + 260);
+    this.dyn.gunScope = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), lam(0x1e2126), MAXA + 260);
 
     // Uebrige Beute: Munitionskisten und Flaschen liegen ebenfalls am Boden
     this.dyn.loot = new THREE.InstancedMesh(box(), lam(0xffffff), MAXL);
@@ -1999,6 +2011,10 @@ const R3D = {
     V.scope.visible = false;
     V.sight = new THREE.Mesh(new THREE.BoxGeometry(1, 2.2, 1.4), dark);
     V.sight.position.set(0, 3.6, -17);
+    V.guard = new THREE.Mesh(new THREE.BoxGeometry(4.0, 4.0, 10), dark);   // Handschutz
+    V.charge = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 5), dark);   // Ladegriff
+    V.muzzle = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 3.4, 8), dark);
+    V.muzzle.rotation.x = Math.PI / 2;
     for (const k in V) g.add(V[k]);
 
     g.position.set(12.5, -10.5, -26);
@@ -2045,7 +2061,14 @@ const R3D = {
     V.stock.position.set(0, -1.4, 4.5);
     V.stock.visible = gun.id !== 'pistol';
     V.sight.position.set(0, bh * 0.62 + 1, -bl * 0.85);
+    V.sight.visible = !S.scope;
     V.scope.position.set(0, bh * 0.62 + 2.4, -bl * 0.6);
+    V.scope.scale.set(1, bl * 0.42 / 9, 1);
+    V.guard.scale.set(bd / 4.0, bh / 5.4, Math.max(0.3, S.barrel[1] * 0.5) / 10);
+    V.guard.position.set(0, bh * 0.05, -bl - S.barrel[1] * 0.24);
+    V.charge.position.set(bd * 0.42, bh * 0.35, -bl * 0.72);
+    V.muzzle.scale.set(S.barrel[0] / 1.6 * 1.35, 1, S.barrel[0] / 1.6 * 1.35);
+    V.muzzle.position.set(0, bh * 0.16, -bl - S.barrel[1] - 1.2);
 
     // Verschluss in Seltenheitsfarbe einfaerben — man sieht, was man traegt
     const c = new THREE.Color(RARITY[gun.rar] ? RARITY[gun.rar].col : '#8a8f98');
@@ -2230,6 +2253,16 @@ Object.assign(R3D, {
     // Magazin unter dem Verschluss
     this.put(this.dyn.gunMag, gi, ox - fx * bl * 0.08, oy - S.body[1] * 0.55 - S.mag[1] * 0.4,
              oz - fz * bl * 0.08, S.mag[0], S.mag[1], S.mag[2], qBody);
+
+    // Schaft hinten, Griff darunter, Zielfernrohr nur wo es hingehoert
+    const stockL = S.stock === 0 ? 0.001 : bl * 0.38;
+    this.put(this.dyn.gunStock, gi, ox - fx * (bl * 0.5 + stockL * 0.5), oy - S.body[1] * 0.18,
+             oz - fz * (bl * 0.5 + stockL * 0.5), S.body[2] * 0.85, S.body[1] * 0.85, stockL, qBody);
+    this.put(this.dyn.gunGrip, gi, ox - fx * bl * 0.30, oy - S.body[1] * 0.5 - 3.4,
+             oz - fz * bl * 0.30, S.body[2] * 0.8, 7.5, S.body[2] * 0.95, qBody);
+    const scopeL = S.scope ? bl * 0.42 : 0.001;
+    this.put(this.dyn.gunScope, gi, ox + fx * bl * 0.08, oy + S.body[1] * 0.62,
+             oz + fz * bl * 0.08, 2.1, scopeL, 2.1, qBar);
   },
 
   updateActors(p) {
@@ -2268,11 +2301,13 @@ Object.assign(R3D, {
 
       // --- Rumpf, Huefte, Kopf, Rucksack
       const hipY = base + H * 0.44, chestY = base + H * 0.63, headY = base + H * 0.87;
-      this.put(D.hips, n, a.x, hipY, a.y, 22, H * 0.10, 15, Q, legCol);
-      this.put(D.torso, n, a.x, chestY, a.y, 23, H * 0.26, 15, Q, C);
-      this.put(D.head, n, a.x + c * 1.5, headY, a.y + sn * 1.5, 14, 14.5, 13.5, Q, hurt ? white : skin);
+      this.put(D.hips, n, a.x, hipY, a.y, 23, H * 0.11, 17, Q, legCol);
+      this.put(D.torso, n, a.x, chestY, a.y, 27, H * 0.27, 19, Q, C);
+      this.put(D.neck, n, a.x, base + H * 0.78, a.y, 8, H * 0.06, 8, Q, hurt ? white : skin);
+      this.put(D.head, n, a.x + c * 1.5, headY, a.y + sn * 1.5, 15, 16.5, 15, Q, hurt ? white : skin);
       // Muetze in Trikotfarbe: sonst verschwimmt der Hautton mit dem Rumpf
-      this.put(D.cap, n, a.x + c * 1.5, headY + 8.5, a.y + sn * 1.5, 15, 5, 14.5, Q, C);
+      this.put(D.cap, n, a.x + c * 1.5, headY + 7.5, a.y + sn * 1.5, 16, 6, 15.5, Q, C);
+      this.put(D.brim, n, a.x + c * 8, headY + 5.2, a.y + sn * 8, 15, 2, 15, Q, C);
       this.put(D.pack, n, a.x - c * 11, base + H * 0.66, a.y - sn * 11, 15, H * 0.20, 7, Q,
                this._packc || (this._packc = new THREE.Color('#5d6440')));
 
@@ -2284,8 +2319,10 @@ Object.assign(R3D, {
         const kY = hipY - Math.cos(sw) * H * 0.22;
         const ax2 = kx + c * Math.sin(sw - kn) * H * 0.21, az2 = kz + sn * Math.sin(sw - kn) * H * 0.21;
         const aY = kY - Math.cos(sw - kn) * H * 0.21;
-        this.seg(D.limb, n * 8 + k * 2, hx, hipY, hz, kx, kY, kz, 8.5, legCol);
-        this.seg(D.limb, n * 8 + k * 2 + 1, kx, kY, kz, ax2, aY, az2, 7.5, legCol);
+        this.seg(D.limb, n * 8 + k * 2, hx, hipY, hz, kx, kY, kz, 9.5, legCol);
+        this.seg(D.limb, n * 8 + k * 2 + 1, kx, kY, kz, ax2, aY, az2, 8.5, legCol);
+        this.put(D.joint, n * 8 + k * 2, hx, hipY, hz, 10, 10, 10, Q, legCol);
+        this.put(D.joint, n * 8 + k * 2 + 1, kx, kY, kz, 9, 9, 9, Q, legCol);
         this.put(D.boot, n * 2 + k, ax2 + c * 2.5, aY + 2.5, az2 + sn * 2.5, 8, 5, 12, Q,
                  this._bootc || (this._bootc = new THREE.Color('#2c2a26')));
       }
@@ -2312,9 +2349,11 @@ Object.assign(R3D, {
           wx = ex + c * Math.sin(sw2 * 0.6) * H * 0.19; wz = ez + sn * Math.sin(sw2 * 0.6) * H * 0.19;
           wY = eY - Math.cos(sw2 * 0.6) * H * 0.19;
         }
-        this.seg(D.limb, n * 8 + 4 + k * 2, sx, shY, sz, ex, eY, ez, 7.5, C);
-        this.seg(D.limb, n * 8 + 4 + k * 2 + 1, ex, eY, ez, wx, wY, wz, 6.5, C);
-        this.put(D.hand, n * 2 + k, wx, wY, wz, 6, 6, 6, Q, hurt ? white : skin);
+        this.seg(D.limb, n * 8 + 4 + k * 2, sx, shY, sz, ex, eY, ez, 8.5, C);
+        this.seg(D.limb, n * 8 + 4 + k * 2 + 1, ex, eY, ez, wx, wY, wz, 7.5, C);
+        this.put(D.joint, n * 8 + 4 + k * 2, sx, shY, sz, 11, 11, 11, Q, C);
+        this.put(D.joint, n * 8 + 4 + k * 2 + 1, ex, eY, ez, 8.5, 8.5, 8.5, Q, C);
+        this.put(D.hand, n * 2 + k, wx, wY, wz, 7.5, 7.5, 7.5, Q, hurt ? white : skin);
         hands.push({ x: wx, y: wY, z: wz });
       }
 
@@ -2339,17 +2378,19 @@ Object.assign(R3D, {
       this.drawGun(gi++, l.data.id, l.data.rar, l.x, 7, l.y, Math.cos(ang), Math.sin(ang), 0);
     }
 
-    for (const k of ['torso', 'hips', 'head', 'cap', 'pack', 'shadow']) {
+    for (const k of ['torso', 'hips', 'head', 'cap', 'brim', 'neck', 'pack', 'shadow']) {
       D[k].count = n; D[k].instanceMatrix.needsUpdate = true;
       if (D[k].instanceColor) D[k].instanceColor.needsUpdate = true;
     }
-    D.limb.count = n * 8; D.limb.instanceMatrix.needsUpdate = true;
-    if (D.limb.instanceColor) D.limb.instanceColor.needsUpdate = true;
+    for (const k of ['limb', 'joint']) {
+      D[k].count = n * 8; D[k].instanceMatrix.needsUpdate = true;
+      if (D[k].instanceColor) D[k].instanceColor.needsUpdate = true;
+    }
     for (const k of ['hand', 'boot']) {
       D[k].count = n * 2; D[k].instanceMatrix.needsUpdate = true;
       if (D[k].instanceColor) D[k].instanceColor.needsUpdate = true;
     }
-    for (const k of ['gunBody', 'gunBarrel', 'gunMag']) {
+    for (const k of ['gunBody', 'gunBarrel', 'gunMag', 'gunStock', 'gunGrip', 'gunScope']) {
       D[k].count = gi; D[k].instanceMatrix.needsUpdate = true;
       if (D[k].instanceColor) D[k].instanceColor.needsUpdate = true;
     }

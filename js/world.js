@@ -3,7 +3,7 @@
    SCHOTTER ROYALE — world: island generation, spatial grid, loot
    ============================================================ */
 
-const MAP = 6600;                // world is MAP x MAP px
+const MAP = 8600;                // world is MAP x MAP px
 const CELL = 200;                // spatial-hash cell size
 
 /* ------------------------------------------------------------
@@ -68,7 +68,7 @@ const World = {
     for (let i = names.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; [names[i], names[j]] = [names[j], names[i]]; }
 
     // --- named locations on a jittered 3x3..4x4 lattice, plus a big centre one
-    const N = 5, pad = 640, step = (MAP - pad * 2) / (N - 1);
+    const N = 6, pad = 700, step = (MAP - pad * 2) / (N - 1);
     let ni = 0;
     for (let gy = 0; gy < N; gy++) {
       for (let gx = 0; gx < N; gx++) {
@@ -144,7 +144,7 @@ const World = {
 
   scatter(R) {
     // forests: clumped trees away from town centres
-    for (let i = 0; i < 190; i++) {
+    for (let i = 0; i < 320; i++) {
       const cx = 200 + R() * (MAP - 400), cy = 200 + R() * (MAP - 400);
       const n = 3 + ((R() * 8) | 0);
       for (let j = 0; j < n; j++) {
@@ -154,7 +154,7 @@ const World = {
         this.props.push(this.prop(R, x, y, 'tree'));
       }
     }
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 430; i++) {
       const x = 100 + R() * (MAP - 200), y = 100 + R() * (MAP - 200);
       if (this.nearBuilding(x, y, 40)) continue;
       this.props.push(this.prop(R, x, y, R() < 0.65 ? 'rock' : 'crate'));
@@ -162,7 +162,7 @@ const World = {
   },
 
   floorLoot(R) {
-    for (let i = 0; i < 300; i++) {
+    for (let i = 0; i < 470; i++) {
       const p = this.pois[(R() * this.pois.length) | 0];
       const a = R() * TAU, d = R() * p.r * 1.15;
       const x = clamp(p.x + Math.cos(a) * d, 60, MAP - 60);
@@ -174,7 +174,7 @@ const World = {
       else it = this.ammoItem();
       this.loot.push(this.item(x, y, it));
     }
-    for (let i = 0; i < 120; i++) {              // sparse loot in the wilderness
+    for (let i = 0; i < 200; i++) {              // sparse loot in the wilderness
       const x = 120 + R() * (MAP - 240), y = 120 + R() * (MAP - 240);
       this.loot.push(this.item(x, y, R() < 0.4 ? rollWeapon(0) : this.ammoItem()));
     }
