@@ -8,7 +8,15 @@ const b64  = f => fs.readFileSync(path.join(ROOT, f)).toString('base64');
 
 const src = read('index.html');
 const style = src.slice(src.indexOf('<style>'), src.indexOf('</style>') + 8);
-const body  = src.slice(src.indexOf('<canvas id="game">'), src.indexOf('<script src="js/core.js">'));
+/* Der Rumpf ist alles ab der Buehne bis zum ersten Skript-Tag. Vorher stand
+   hier ein fester Anker auf <canvas id="game">; als die Buehne dazukam, fielen
+   das umschliessende <div id="stage"> und die WebGL-Leinwand aus dem Ausschnitt
+   und three.js blieb als toter externer Verweis stehen. Anker deshalb aus der
+   Struktur ableiten und das Ergebnis unten pruefen. */
+const bodyStart = src.indexOf('<div id="stage">');
+const bodyEnd   = src.indexOf('<script', bodyStart);
+if (bodyStart < 0 || bodyEnd < 0) throw new Error('Rumpf nicht gefunden — Struktur von index.html geaendert?');
+const body = src.slice(bodyStart, bodyEnd);
 
 const icon180 = 'data:image/png;base64,' + b64('icon-180.png');
 const manifest = JSON.parse(read('manifest.webmanifest'));
@@ -61,6 +69,14 @@ let out = '<title>Schotter Royale</title>\n' + style + '\n' + shim + '\n' + body
 
 // Kein Service Worker: die Datei ist eine einzelne Seite, es gibt kein sw.js daneben.
 out = out.replace(/\s*if \('serviceWorker' in navigator[\s\S]*?\n  \}\n/, '\n');
+
+// Pruefungen, damit ein kaputter Build nicht unbemerkt veroeffentlicht wird
+const mustHave = ['id="stage"', 'id="gl"', 'id="game"', 'id="hud"', 'id="menu"', 'id="bJump"'];
+for (const m of mustHave) if (!out.includes(m)) throw new Error('fehlt im Build: ' + m);
+const ext = out.match(/<(?:script|link)[^>]+(?:src|href)="(?!data:)[^"]+"/g) || [];
+if (ext.length) throw new Error('externe Verweise im Build: ' + ext.join(', '));
+const opened = (out.match(/<div/g) || []).length, closed = (out.match(/<\/div>/g) || []).length;
+if (opened !== closed) throw new Error(`div-Bilanz ${opened}/${closed}`);
 
 fs.mkdirSync(path.join(ROOT, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(ROOT, 'dist', 'artifact.html'), out);
