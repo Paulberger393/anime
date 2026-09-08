@@ -86,6 +86,17 @@ const DIFF = {
 };
 const DIFF_ORDER = ['easy', 'normal', 'hard', 'pro'];
 
+/* Spielmodi. `squad` teilt das ganze Feld in Trupps, `blitz` ist eine kurze
+   Runde auf engem Raum, in der alle bewaffnet starten. */
+const MODES = [
+  { id: 'solo',  name: 'Solo',   sub: 'Jeder gegen jeden',        team: 1, bots: 100, arm: false, zone: 1.00, pace: 1.00 },
+  { id: 'squad', name: 'Trupps', sub: 'Du und drei Verbündete',   team: 4, bots: 100, arm: false, zone: 1.00, pace: 1.00 },
+  { id: 'blitz', name: 'Blitz',  sub: 'Klein, bewaffnet, schnell', team: 1, bots: 40,  arm: true,  zone: 0.42, pace: 0.55 }
+];
+
+/* Truppfarben — deutlich unterscheidbar und getrennt von Rot (Gegner). */
+const TEAM_COLS = ['#4ade80', '#60a5fa', '#f472b6', '#fbbf24', '#a78bfa', '#22d3ee'];
+
 const POI_NAMES = [
   'Kieskuppe', 'Schotterbucht', 'Ödturm', 'Rostwerk', 'Nebeltal', 'Kranfeld',
   'Salzsee', 'Betonstadt', 'Funkhügel', 'Alte Mühle', 'Containerhof', 'Silobucht',

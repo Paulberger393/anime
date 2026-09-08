@@ -20,7 +20,7 @@ const Game = {
   feed: [], hintItem: null, lowFx: false,
 
   opts: {
-    bots: 100, diff: 'normal', autofire: true, aim: 1,
+    mode: 0, bots: 100, diff: 'normal', autofire: true, aim: 1,
     speed: 1, sound: true, hand: 0, quality: 0, view: 1, sens: 1, quer: 0, start: 1, marks: 1, tapfire: 1, autorun: 1
   },
 
@@ -59,11 +59,25 @@ const Game = {
     addEventListener('orientationchange', () => setTimeout(() => this.applyRotation(), 300));
 
     document.getElementById('play').onclick = () => this.startMatch();
+    document.getElementById('optToggle').onclick = () => {
+      const o = document.getElementById('opts');
+      o.classList.toggle('hide');
+      document.getElementById('optToggle').textContent =
+        o.classList.contains('hide') ? 'Einstellungen' : 'Schließen';
+    };
+    this.buildModeCards();
     document.getElementById('again').onclick = () => this.startMatch();
     document.getElementById('toMenu').onclick = () => this.toMenu();
     document.querySelectorAll('.opt').forEach(b => b.onclick = () => this.cycleOpt(b.dataset.opt));
     this.refreshOpts();
     this.refreshStats();
+    this.refreshHint();
+    document.body.classList.toggle('pc', !!Input.isDesktop);
+    if (Input.isDesktop) {
+      document.getElementById('keys').innerHTML =
+        '<b>WASD</b> laufen · <b>Shift</b> sprinten · <b>Maus</b> zielen · <b>Klick</b> feuern<br>' +
+        '<b>R</b> nachladen · <b>E</b> aufheben · <b>Q</b> heilen · <b>F</b> Hacke · <b>B</b> bauen · <b>1–5</b> Waffe';
+    }
 
     // background canvas for the ground texture (drawn once)
     this.groundPat = this.makeGround();
@@ -71,6 +85,9 @@ const Game = {
     else { this.opts.view = 0; }        // kein WebGL -> Top-Down bleibt spielbar
     this.applyView();
     this.applyRotation();               // setzt auch resize(), erst jetzt kennt R3D die Groesse
+    // Hinter dem Menue laeuft die echte Welt: eine Insel bauen und die Kamera
+    // langsam darueber kreisen lassen. Kostet einmalig ~1 s beim Start.
+    if (R3D.ok) setTimeout(() => this.buildMenuScene(), 60);
     this.last = performance.now();
     requestAnimationFrame(t => this.frame(t));
   },
@@ -117,6 +134,7 @@ const Game = {
   cycleOpt(k) {
     const o = this.opts;
     switch (k) {
+      case 'mode': o.mode = (o.mode + 1) % MODES.length; this.refreshOpts(); break;
       case 'bots': o.bots = o.bots >= 120 ? 30 : o.bots === 100 ? 120 : o.bots === 75 ? 100 : o.bots === 50 ? 75 : 50; break;
       case 'diff': o.diff = DIFF_ORDER[(DIFF_ORDER.indexOf(o.diff) + 1) % 4]; break;
       case 'autofire': o.autofire = !o.autofire; break;
@@ -140,7 +158,7 @@ const Game = {
   refreshOpts() {
     const o = this.opts;
     const txt = {
-      bots: o.bots, diff: DIFF[o.diff].name,
+      mode: MODES[o.mode].name, bots: o.bots, diff: DIFF[o.diff].name,
       autofire: o.autofire ? 'An' : 'Aus',
       aim: ['Aus', 'Normal', 'Stark'][o.aim],
       speed: ['Normal', 'Schnell', 'Blitz'][o.speed],
@@ -163,6 +181,39 @@ const Game = {
   },
 
   get v3() { return this.opts.view === 1 && R3D.ok; },
+
+  /** Modus-Auswahl als Karten: die eine Entscheidung vor jedem Match */
+  buildModeCards() {
+    const wrap = document.getElementById('modeCards');
+    const ic = { solo: '🎯', squad: '🛡️', blitz: '⚡' };
+    wrap.innerHTML = '';
+    MODES.forEach((m, i) => {
+      const el = document.createElement('button');
+      el.className = 'mode' + (i === this.opts.mode ? ' sel' : '');
+      el.innerHTML = `<span class="mi">${ic[m.id]}</span>` +
+        `<span class="mtx"><span class="mt">${m.name}</span><span class="ms">${m.sub}</span></span>` +
+        `<span class="mk">GEWÄHLT</span>`;
+      el.onclick = () => {
+        this.opts.mode = i;
+        Store.data.opts = this.opts; Store.save();
+        this.buildModeCards();
+        this.refreshOpts();
+      };
+      wrap.appendChild(el);
+    });
+  },
+
+  /** Steuerungshinweis passend zum Geraet */
+  refreshHint() {
+    const el = document.getElementById('ctrlHint');
+    if (!el) return;
+    el.innerHTML = Input.isDesktop
+      ? 'PC: <b>WASD</b> laufen · <b>Maus</b> zielen (klicken für Mauszeiger-Sperre) · <b>Linksklick</b> feuern · ' +
+        '<b>Rechtsklick</b> zielen · <b>R</b> nachladen · <b>E</b> aufheben · <b>Q</b> heilen · <b>F</b> Hacke · ' +
+        '<b>B</b> bauen · <b>1–5</b> Waffe · <b>Leertaste</b> abspringen'
+      : 'Links ziehen = laufen · Rechts wischen = umschauen · Über <b>Teilen → Zum Home-Bildschirm</b> ' +
+        'für Vollbild und Offline-Betrieb.';
+  },
 
   /** Erzwungene Querlage: nur sinnvoll, wenn das Geraet gerade hochkant steht. */
   applyRotation() {
@@ -195,7 +246,9 @@ const Game = {
   startMatch() {
     Snd.init(); Snd.mute(this.opts.sound);
     AI.D = DIFF[this.opts.diff];
-    this.timeScale = [1, 0.62, 0.42][this.opts.speed];
+    const M = MODES[this.opts.mode];
+    this.mode = M;
+    this.timeScale = [1, 0.62, 0.42][this.opts.speed] / (MODES[this.opts.mode].pace || 1);
 
     World.gen((Math.random() * 1e9) | 0);
     if (R3D.ok) { R3D.buildWorld(); R3D.fx.length = 0; }
@@ -211,11 +264,30 @@ const Game = {
 
     const names = BOT_NAMES.slice();
     for (let i = names.length - 1; i > 0; i--) { const j = rndi(0, i); [names[i], names[j]] = [names[j], names[i]]; }
-    for (let i = 0; i < this.opts.bots; i++) {
+    const nBots = M.bots === 100 ? this.opts.bots : M.bots;
+    for (let i = 0; i < nBots; i++) {
       const b = AI.spawn(names[i % names.length] + (i >= names.length ? '_' + (1 + ((i / names.length) | 0)) : ''));
       AI.equip(b);
+      if (M.arm) { const g = rollWeapon(0.4); b.take(g); b.addAmmo(g.ammo, 90); }
       this.bots.push(b); this.actors.push(b);
     }
+    // --- Trupps verteilen. Im Solo ist jeder sein eigenes Team, damit die
+    //     gleiche Logik ueberall greift und nirgends Sonderfaelle noetig sind.
+    const teamSize = M.team;
+    if (teamSize <= 1) {
+      for (const a of this.actors) a.team = a.id;
+    } else {
+      p.team = 0;
+      let t = 0, filled = 1;
+      for (const bt of this.bots) {
+        if (filled >= teamSize) { t++; filled = 0; }
+        bt.team = t; bt.color = t % ACTOR_COLS.length;
+        filled++;
+      }
+      // Verbuendete des Spielers erkennbar einfaerben
+      for (const a of this.actors) if (a.team === 0) a.color = 8;
+    }
+    this.squad = teamSize > 1;
     this.total = this.alive = this.actors.length;
 
     // --- battle bus: a random chord across the island
@@ -246,7 +318,7 @@ const Game = {
     const z = this.zone;
     z.x = cx + rnd(-MAP * 0.09, MAP * 0.09);
     z.y = cy + rnd(-MAP * 0.09, MAP * 0.09);
-    z.r = MAP * 0.70; z.phase = -1; z.mode = 'wait'; z.t = 4; z.dps = 0;
+    z.r = MAP * 0.70 * M.zone; z.phase = -1; z.mode = 'wait'; z.t = 4; z.dps = 0;
     z.nx = z.x; z.ny = z.y; z.nr = z.r;
 
     this.build.on = false; this.build.kind = 'wall'; this.build.mat = 'wood';
@@ -259,6 +331,7 @@ const Game = {
     this.el.flash.style.opacity = 0;
     this.el.menu.classList.add('hide');
     this.el.result.classList.add('hide');
+    if (R3D.ok) R3D.storm.visible = true;
     this.el.hud.classList.remove('hide');
     document.getElementById('cross').classList.add('hide');   // erst nach der Landung
     this.el.jump.classList.remove('hide');
@@ -269,8 +342,40 @@ const Game = {
     this.updateSlots();
   },
 
+  buildMenuScene() {
+    if (!R3D.ok || this.menuReady) return;
+    World.gen((Math.random() * 1e9) | 0);
+    R3D.buildWorld();
+    const poi = World.pois.reduce((a, b) => (b.big ? b : a), World.pois[0]);
+    this.menuCam = { cx: poi.x, cy: poi.y, a: rnd(TAU) };
+    this.menuReady = true;
+  },
+
+  /** Kamera schwenkt in grosser Kurve ueber einen Ort — ruhig genug,
+      dass die Schrift davor lesbar bleibt. */
+  updateMenuCam(dt) {
+    if (!this.menuReady) return;
+    const m = this.menuCam;
+    m.a += dt * 0.045;
+    const r = 1150;
+    R3D.cam.position.set(m.cx + Math.cos(m.a) * r, 620, m.cy + Math.sin(m.a) * r);
+    R3D.cam.lookAt(m.cx, 90, m.cy);
+    R3D.vm.visible = false;
+    R3D.sunTarget.position.set(m.cx, 0, m.cy);
+    R3D.sun.position.set(m.cx - 900, 1530, m.cy + 500);
+    R3D.sky.position.copy(R3D.cam.position);
+    R3D.cullChunks();
+    R3D.storm.scale.set(1, 1, 1);
+    R3D.storm.visible = false;
+    for (const k in R3D.dyn) R3D.dyn[k].count = 0;
+    R3D.tracerMesh.geometry.setDrawRange(0, 0);
+    R3D.ren.render(R3D.scene, R3D.cam);
+  },
+
   toMenu() {
     this.state = 'menu';
+    this.menuReady = false;
+    if (R3D.ok) setTimeout(() => this.buildMenuScene(), 40);
     this.el.hud.classList.add('hide');
     this.el.result.classList.add('hide');
     this.el.menu.classList.remove('hide');
@@ -618,7 +723,7 @@ const Game = {
     let best = null, bs = 1e9;
     for (let i = 0; i < near.length; i++) {
       const o = near[i];
-      if (o === p || !o.alive || o.drop.phase !== 'ground') continue;
+      if (o === p || !o.alive || o.drop.phase !== 'ground' || o.team === p.team) continue;
       const d = dist(p.x, p.y, o.x, o.y);
       if (d > range) continue;
       const a = Math.atan2(o.y - p.y, o.x - p.x);
@@ -713,6 +818,7 @@ const Game = {
     for (let i = 0; i < near.length; i++) {
       const o = near[i];
       if (o === a || !o.alive || o.drop.phase !== 'ground') continue;
+      if (o.team === a.team) continue;
       const d2 = dist2(a.x, a.y, o.x, o.y);
       if (d2 > bd) continue;
       if (Math.abs(angDiff(ang, Math.atan2(o.y - a.y, o.x - a.x))) > 0.9) continue;
@@ -857,6 +963,7 @@ const Game = {
     for (let i = 0; i < acts.length; i++) {
       const o = acts[i];
       if (o === b.owner || !o.alive || o.drop.phase !== 'ground') continue;
+      if (b.owner && o.team === b.owner.team) continue;      // kein Eigenbeschuss
       const t = this.segCircle(x0, y0, dx, dy, o.x, o.y, o.r + 4);
       if (t < 0 || (best && t >= best.t)) continue;
       const z = zAt(t);
@@ -965,6 +1072,7 @@ const Game = {
     for (let i = 0; i < near.length; i++) {
       const o = near[i];
       if (!o.alive || o.drop.phase !== 'ground') continue;
+      if (b.owner && o.team === b.owner.team && o !== b.owner) continue;
       const d = dist(x, y, o.x, o.y);
       if (d > b.aoe) continue;
       const dmg = b.dmg * (1 - d / b.aoe * 0.6);
@@ -1001,7 +1109,22 @@ const Game = {
     if (!this.lowFx) for (let i = 0; i < 8; i++) this.spark(victim.x, victim.y, rnd(TAU), rnd(60, 240), '#ff6b6b', rnd(0.25, 0.5));
 
     if (victim === this.player) this.endMatch(false);
-    else if (this.alive === 1 && this.player.alive) this.endMatch(true);
+    else if (this.player.alive && this.teamsAlive() <= 1) this.endMatch(true);
+  },
+
+  /** Wie viele Teams sind noch im Rennen? Im Solo ist das die Spielerzahl. */
+  teamsAlive() {
+    const seen = this._teams || (this._teams = new Set());
+    seen.clear();
+    for (const a of this.actors) if (a.alive) seen.add(a.team);
+    return seen.size;
+  },
+
+  /** Lebende Verbündete des Spielers (ohne ihn selbst) */
+  squadAlive() {
+    let n = 0;
+    for (const a of this.actors) if (a.alive && a !== this.player && a.team === this.player.team) n++;
+    return n;
   },
 
   dropLoot(a) {
@@ -1306,10 +1429,6 @@ Object.assign(Game, {
       if (o === p || !o.alive || o.drop.phase !== 'ground') continue;
       const d = dist(p.x, p.y, o.x, o.y);
       if (d > RANGE) continue;
-      // nur was man auch sehen koennte: im Blickfeld und ohne Wand davor
-      if (Math.abs(angDiff(p.aimAng, Math.atan2(o.y - p.y, o.x - p.x))) > 0.95) continue;
-      if (World.losBlocked(p.x, p.y, o.x, o.y)) continue;
-      list.push({ o, d });
     }
     list.sort((a, b) => a.d - b.d);
     const out = this._proj || (this._proj = { x: 0, y: 0 });
@@ -1329,7 +1448,8 @@ Object.assign(Game, {
       m.el.style.left = pos.x + 'px';
       m.el.style.top = pos.y + 'px';
       m.el.classList.toggle('far', e.d > 620);
-      m.el.classList.toggle('sh', e.o.sh > 0);
+      m.el.classList.toggle('sh', !e.mate && e.o.sh > 0);
+      m.el.classList.toggle('mate', !!e.mate);
       m.name.textContent = e.o.name;
       m.bar.style.transform = 'scaleX(' + clamp(e.o.sh > 0 ? e.o.sh / e.o.maxSh : e.o.hp / e.o.maxHp, 0, 1) + ')';
       m.dist.textContent = Math.round(e.d / 50) + ' m';
@@ -1439,8 +1559,14 @@ Object.assign(Game, {
     e.wood.textContent = p.mats.wood | 0;
     e.brick.textContent = p.mats.brick | 0;
     e.metal.textContent = p.mats.metal | 0;
-    e.alive.innerHTML = this.alive + '<small>ÜBRIG</small>';
-    e.kills.textContent = '☠ ' + p.kills + ' Kills';
+    if (this.squad) {
+      e.alive.innerHTML = this.teamsAlive() + '<small>TRUPPS ÜBRIG</small>';
+      const mates = this.squadAlive();
+      e.kills.textContent = '☠ ' + p.kills + ' Kills  ·  🛡 ' + mates + ' Verbündete';
+    } else {
+      e.alive.innerHTML = this.alive + '<small>ÜBRIG</small>';
+      e.kills.textContent = '☠ ' + p.kills + ' Kills';
+    }
     const z = this.zone;
     if (z.mode === 'move') { e.storm.textContent = '⚡ Sturm zieht sich zusammen'; e.storm.classList.add('warn'); }
     else if (z.mode === 'done') { e.storm.textContent = '☠ Letzter Kreis'; e.storm.classList.add('warn'); }
@@ -1473,6 +1599,10 @@ Object.assign(Game, {
     if (this.v3) {
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      if (this.state === 'menu' || this.state === 'result') {
+        this.updateMenuCam(dt);
+        if (this.state === 'menu') return;
+      }
       if (this.state !== 'menu') {
         R3D.render(dt);
         g.save(); g.scale(this.dpr, this.dpr);

@@ -192,7 +192,7 @@ const AI = {
     let best = null, bd = view * view;
     for (let i = 0; i < near.length; i++) {
       const o = near[i];
-      if (o === b || !o.alive) continue;
+      if (o === b || !o.alive || o.team === b.team) continue;
       const d2 = dist2(b.x, b.y, o.x, o.y);
       if (d2 > bd) continue;
       // being shot at makes a bot look your way even without a clean line
@@ -393,7 +393,7 @@ const AI = {
     let foe = null, bd = 430 * 430;
     for (let i = 0; i < near.length; i++) {
       const o = near[i];
-      if (o === b || !o.alive || !o.isBot) continue;
+      if (o === b || !o.alive || !o.isBot || o.team === b.team) continue;
       const d2 = dist2(b.x, b.y, o.x, o.y);
       if (d2 < bd) { bd = d2; foe = o; }
     }

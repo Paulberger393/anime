@@ -173,12 +173,37 @@ const Input = {
     document.addEventListener('gesturestart', e => e.preventDefault(), opt);
     document.addEventListener('contextmenu',  e => e.preventDefault(), opt);
 
-    // desktop fallback so the game is testable without a phone
+    // --- PC: Zeiger-Sperre, damit die Maus wie in jedem Shooter dreht,
+    //     statt an den Fensterrand zu stossen.
+    this.isDesktop = !(('ontouchstart' in window) || (navigator.maxTouchPoints > 0)) ||
+                     matchMedia('(pointer: fine)').matches;
+    c.addEventListener('click', () => {
+      if (this.isDesktop && Game.state === 'play' && !document.pointerLockElement) {
+        c.requestPointerLock && c.requestPointerLock();
+      }
+    });
+    document.addEventListener('pointerlockchange', () => {
+      this.locked = document.pointerLockElement === c;
+    });
+    addEventListener('wheel', e => { this.wheel = (this.wheel || 0) + Math.sign(e.deltaY); }, { passive: true });
+    c.addEventListener('mousedown', e => {
+      if (e.button === 2) this.press('ads');
+      else if (e.button === 0) this.mouse = true;
+    });
+    addEventListener('mouseup', e => { if (e.button === 2) this.release('ads'); });
+
     this.keys = {};
     addEventListener('keydown', e => { this.keys[e.code] = true; this.key(e.code, true); });
     addEventListener('keyup',   e => { this.keys[e.code] = false; this.key(e.code, false); });
     c.addEventListener('mousemove', e => {
-      if (this.mx !== undefined) { this.mdx = (this.mdx || 0) + e.clientX - this.mx; this.mdy = (this.mdy || 0) + e.clientY - this.my; }
+      if (this.locked) {
+        // Bei gesperrtem Zeiger liefert der Browser reine Bewegungsdeltas
+        this.mdx = (this.mdx || 0) + e.movementX;
+        this.mdy = (this.mdy || 0) + e.movementY;
+      } else if (this.mx !== undefined) {
+        this.mdx = (this.mdx || 0) + e.clientX - this.mx;
+        this.mdy = (this.mdy || 0) + e.clientY - this.my;
+      }
       this.mx = e.clientX; this.my = e.clientY;
     });
     c.addEventListener('mousedown', e => { this.mouse = true; e.preventDefault(); });
@@ -293,8 +318,10 @@ const Input = {
   },
 
   key(code, dn) {
-    const map = { Space: 'fire', KeyR: 'reload', KeyE: 'use', KeyQ: 'heal', KeyF: 'pickaxe',
-                  ShiftLeft: 'sprint', KeyB: 'build', KeyZ: 'bwall', KeyX: 'bcorner', KeyC: 'bbox', KeyV: 'bmat' };
+    const map = { Space: 'jump', KeyR: 'reload', KeyE: 'use', KeyQ: 'heal', KeyF: 'pickaxe',
+                  ShiftLeft: 'sprint', ShiftRight: 'sprint', KeyB: 'build',
+                  KeyZ: 'bwall', KeyX: 'bcorner', KeyC: 'bbox', KeyV: 'bmat',
+                  Digit1: 'slot0', Digit2: 'slot1', Digit3: 'slot2', Digit4: 'slot3', Digit5: 'slot4' };
     if (map[code]) { dn ? this.press(map[code]) : this.release(map[code]); }
   },
 
@@ -305,13 +332,19 @@ const Input = {
     let dy = (k.KeyS ? 1 : 0) - (k.KeyW ? 1 : 0);
     if (dx || dy) { const n = Math.hypot(dx, dy); this.move.x = dx / n; this.move.y = dy / n; this.move.mag = 1; }
     else if (!this.move.active) { this.move.mag = 0; }
-    if (this.mx !== undefined && !this.aim.active) {
+    if (!Game.v3 && this.mx !== undefined && !this.aim.active) {
       const ax = this.mx - px, ay = this.my - py, n = Math.hypot(ax, ay) || 1;
       this.aim.x = ax / n; this.aim.y = ay / n; this.aim.mag = 1;
     }
     const fireEl = this.els.fire;
     if (this.mouse) this.btn.fire = true;
     else if (!fireEl || !fireEl.classList.contains('on')) this.btn.fire = false;
+    // Mausrad wechselt die Waffe
+    if (this.wheel) {
+      const d = this.wheel > 0 ? 1 : -1; this.wheel = 0;
+      const p = Game.player;
+      if (p) { for (let i = 1; i <= 5; i++) { const k = (p.sel + d * i + 5) % 5; if (p.slots[k]) { this.tapped['slot' + k] = true; break; } } }
+    }
   },
 
   /** Blickbewegung seit dem letzten Bild; das Lesen setzt sie zurueck */

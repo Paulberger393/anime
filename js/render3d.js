@@ -45,6 +45,12 @@ const R3D = {
     this.ren.shadowMap.enabled = true;
     this.ren.shadowMap.type = THREE.PCFSoftShadowMap;
     this.ren.shadowMap.autoUpdate = true;
+    // Filmisches Tone-Mapping statt harter Abschneidung: Lichter laufen weich
+    // aus, statt bei 1.0 weiss umzuklappen. Das ist der groesste einzelne
+    // Schritt weg vom flachen Plastik-Look.
+    this.ren.toneMapping = THREE.ACESFilmicToneMapping;
+    this.ren.toneMappingExposure = 1.15;
+    this.ren.physicallyCorrectLights = false;
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0xa6c6e0, 600, 3500);
 
@@ -61,7 +67,7 @@ const R3D = {
     sun.shadow.camera.left = -SH; sun.shadow.camera.right = SH;
     sun.shadow.camera.top = SH; sun.shadow.camera.bottom = -SH;
     sun.shadow.camera.near = 100; sun.shadow.camera.far = 5200;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.mapSize.set(Game && Game.opts && Game.opts.quality === 1 ? 2048 : 1024, Game && Game.opts && Game.opts.quality === 1 ? 2048 : 1024);
     sun.shadow.bias = -0.0012;
     sun.shadow.normalBias = 2.5;
     this.sun = sun;
@@ -170,7 +176,7 @@ const R3D = {
       cols[i * 3] = C.r; cols[i * 3 + 1] = C.g; cols[i * 3 + 2] = C.b;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-    const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex, vertexColors: true }));
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, roughness: 0.96, metalness: 0.0 }));
     m.receiveShadow = true;
     m.position.set(MAP / 2, 0, MAP / 2);
     this.scene.add(m);
@@ -193,12 +199,12 @@ const R3D = {
     const blob = new THREE.CircleGeometry(1, 10); blob.rotateX(-Math.PI / 2);
     const geos = { box, roof: box, trunk, leaf, pine, rock, blob };
     const mats = {
-      box:   new THREE.MeshLambertMaterial({ color: 0xffffff }),   // Farbe je Instanz
-      roof:  new THREE.MeshLambertMaterial({ color: 0xffffff }),
-      trunk: new THREE.MeshLambertMaterial({ color: 0x6b4c2a }),
-      leaf:  new THREE.MeshLambertMaterial({ color: 0x3f7a3c, flatShading: true }),
-      pine:  new THREE.MeshLambertMaterial({ color: 0x2f6b41, flatShading: true }),
-      rock:  new THREE.MeshLambertMaterial({ color: 0x8b8d92, flatShading: true }),
+      box:   new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0.02 }),
+      roof:  new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.80, metalness: 0.06 }),
+      trunk: new THREE.MeshStandardMaterial({ color: 0x6b4c2a, roughness: 0.95 }),
+      leaf:  new THREE.MeshStandardMaterial({ color: 0x3f7a3c, roughness: 0.88, flatShading: true }),
+      pine:  new THREE.MeshStandardMaterial({ color: 0x2f6b41, roughness: 0.88, flatShading: true }),
+      rock:  new THREE.MeshStandardMaterial({ color: 0x8b8d92, roughness: 0.98, flatShading: true }),
 
       // Kein Schattenwurf per Shadow-Map: 100 Figuren plus Wald waeren dem
       // Handy zu teuer. Ein weicher Fleck unter jedem Objekt erdet genauso gut.
@@ -320,7 +326,10 @@ const R3D = {
   /* ---------------------------------------------------- bewegliche Objekte */
   buildDynamic() {
     const MAXA = 130, MAXL = 700, MAXB = 900;
-    const lam = (c, o) => new THREE.MeshLambertMaterial(Object.assign({ color: c }, o || {}));
+    // Standard-Material (PBR) statt Lambert: erst Rauheit und Metallgrad
+    // lassen Stoff, Haut und Stahl unterschiedlich aussehen.
+    const lam = (c, o) => new THREE.MeshStandardMaterial(
+      Object.assign({ color: c, roughness: 0.85, metalness: 0.0 }, o || {}));
 
     /* Figuren aus einem kleinen Skelett: Kopf, Brustkorb, Huefte, Rucksack,
        acht Gliedmassen-Segmente (Ober-/Unterarm, Ober-/Unterschenkel),
@@ -333,13 +342,13 @@ const R3D = {
     this.dyn.torso = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.46, 0.40, 1, 12), lam(0xffffff), MAXA);
     this.dyn.hips  = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.44, 0.46, 1, 10), lam(0x39435c), MAXA);
     this.dyn.neck  = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 8), lam(0xffffff), MAXA);
-    this.dyn.head  = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 1), lam(0xffffff), MAXA);
+    this.dyn.head  = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 2), lam(0xffffff, { roughness: 0.72 }), MAXA);
     this.dyn.pack  = new THREE.InstancedMesh(box(), lam(0x5d6440), MAXA);
     this.dyn.cap   = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.52, 0.5, 1, 12), lam(0xffffff), MAXA);
     this.dyn.brim  = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 12, 1, false, 0, Math.PI), lam(0xffffff), MAXA);
-    this.dyn.limb  = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.42, 1, 8), lam(0xffffff), MAXA * 8);
-    this.dyn.joint = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 0), lam(0xffffff), MAXA * 8);
-    this.dyn.hand  = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 0), lam(0xe0b189), MAXA * 2);
+    this.dyn.limb  = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.42, 1, 10), lam(0xffffff), MAXA * 8);
+    this.dyn.joint = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 1), lam(0xffffff), MAXA * 8);
+    this.dyn.hand  = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 1), lam(0xe0b189, { roughness: 0.72 }), MAXA * 2);
     this.dyn.boot  = new THREE.InstancedMesh(box(), lam(0x2c2a26), MAXA * 2);
     const disc = new THREE.CircleGeometry(1, 12); disc.rotateX(-Math.PI / 2);
     this.dyn.shadow = new THREE.InstancedMesh(disc,
@@ -348,12 +357,14 @@ const R3D = {
     /* Waffen: drei Teile, deren Masse je Waffentyp variieren. Dieselben Meshes
        tragen sowohl die Waffe in der Hand als auch die am Boden liegende —
        ein Gewehr sieht dadurch ueberall gleich aus. */
-    this.dyn.gunBody = new THREE.InstancedMesh(box(), lam(0xffffff), MAXA + 260);
-    this.dyn.gunBarrel = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 6), lam(0x23262c), MAXA + 260);
-    this.dyn.gunMag  = new THREE.InstancedMesh(box(), lam(0x2a2e35), MAXA + 260);
-    this.dyn.gunStock = new THREE.InstancedMesh(box(), lam(0x53412c), MAXA + 260);
-    this.dyn.gunGrip  = new THREE.InstancedMesh(box(), lam(0x33383f), MAXA + 260);
-    this.dyn.gunScope = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), lam(0x1e2126), MAXA + 260);
+    const steel = { roughness: 0.38, metalness: 0.85 };
+    const poly  = { roughness: 0.55, metalness: 0.05 };
+    this.dyn.gunBody = new THREE.InstancedMesh(box(), lam(0xffffff, steel), MAXA + 260);
+    this.dyn.gunBarrel = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), lam(0x23262c, steel), MAXA + 260);
+    this.dyn.gunMag  = new THREE.InstancedMesh(box(), lam(0x2a2e35, poly), MAXA + 260);
+    this.dyn.gunStock = new THREE.InstancedMesh(box(), lam(0x53412c, { roughness: 0.75, metalness: 0.0 }), MAXA + 260);
+    this.dyn.gunGrip  = new THREE.InstancedMesh(box(), lam(0x33383f, poly), MAXA + 260);
+    this.dyn.gunScope = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 10), lam(0x1e2126, steel), MAXA + 260);
 
     // Uebrige Beute: Munitionskisten und Flaschen liegen ebenfalls am Boden
     this.dyn.loot = new THREE.InstancedMesh(box(), lam(0xffffff), MAXL);
@@ -418,9 +429,9 @@ const R3D = {
       Schrotflinte kurz und dick. */
   buildViewModel() {
     const g = new THREE.Group();
-    const dark = new THREE.MeshLambertMaterial({ color: 0x2a2f37 });
-    const body = new THREE.MeshLambertMaterial({ color: 0x525a66 });
-    const wood = new THREE.MeshLambertMaterial({ color: 0x54402a });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x2a2f37, roughness: 0.34, metalness: 0.88 });
+    const body = new THREE.MeshStandardMaterial({ color: 0x525a66, roughness: 0.40, metalness: 0.80 });
+    const wood = new THREE.MeshStandardMaterial({ color: 0x54402a, roughness: 0.78, metalness: 0.02 });
     const V = this.vmParts = {};
 
     V.receiver = new THREE.Mesh(new THREE.BoxGeometry(4.4, 5.2, 20), body);
@@ -558,8 +569,13 @@ Object.assign(R3D, {
       Spart auf dem Handy den Grossteil der Zeichenaufrufe. */
   cullChunks() {
     const cx = this.cam.position.x, cz = this.cam.position.z;
-    const yaw = (Game.player.aimAng || 0);
-    const dx0 = Math.cos(yaw), dz0 = Math.sin(yaw);
+    // Blickrichtung aus der Kamera selbst ableiten, nicht aus dem Spieler:
+    // im Menue gibt es noch keinen, und die Kamera kreist dort frei.
+    const fwd = this._fwd || (this._fwd = new THREE.Vector3());
+    this.cam.getWorldDirection(fwd);
+    let dx0 = fwd.x, dz0 = fwd.z;
+    const fl = Math.hypot(dx0, dz0) || 1;
+    dx0 /= fl; dz0 /= fl;
     const FAR = this.scene.fog.far + CHUNK;
     const NEAR2 = (CHUNK * 1.2) * (CHUNK * 1.2);
     for (const [, list] of this.chunks) {

@@ -154,6 +154,10 @@ body.quer2 #stage{width:100vh;height:100vw;top:100%;left:0;
   text-shadow:0 1px 3px #000}
 .mk.far b{font-size:9px;opacity:.8}
 .mk.far i{width:30px;height:3px}
+/* Verbündete: grün, mit Schild-Zeichen, klar von Gegnern getrennt */
+.mk.mate b{color:#7dffb0}
+.mk.mate b::before{content:"🛡 "}
+.mk.mate i s{background:#7dffb0}
 
 /* Trefferbestaetigung: vier Striche, die kurz aufblitzen */
 #hitm{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;
@@ -183,10 +187,74 @@ body.quer2 #stage{width:100vh;height:100vw;top:100%;left:0;
 #alt{position:absolute;left:50%;top:50%;margin:70px 0 0 -80px;width:160px;text-align:center;
   font-size:13px;font-weight:800;letter-spacing:1px;text-shadow:0 2px 6px #000}
 
+/* Am PC steuert die Tastatur — die Daumenknoepfe waeren nur Unrat im Bild.
+   Die Waffenleiste bleibt, sie ist auch dort eine nuetzliche Anzeige. */
+body.pc .btn{display:none!important}
+body.pc #bJump{display:flex!important}
+body.pc #slots{bottom:calc(env(safe-area-inset-bottom) + 10px)}
+#keys{position:absolute;left:calc(env(safe-area-inset-left) + 12px);
+  bottom:calc(env(safe-area-inset-bottom) + 10px);font-size:10px;line-height:1.75;color:#9fb0cc;
+  text-shadow:0 1px 3px #000;pointer-events:none;display:none}
+body.pc #keys{display:block}
+#keys b{color:#e6eeff}
+
 #dmgFlash{position:absolute;inset:0;pointer-events:none;opacity:0;
   box-shadow:inset 0 0 120px 30px rgba(255,40,40,.85);transition:opacity .25s}
 
 /* ---------- overlays ---------- */
+/* ---------- Startbildschirm ----------
+   Hinter dem Menue laeuft die echte 3D-Insel mit langsam kreisender Kamera.
+   Die Flaechen darueber sind bewusst dunkel und schmal, damit man sie sieht. */
+#menu{background:none;justify-content:stretch;align-items:stretch;padding:0}
+#menu::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(105deg,rgba(6,9,18,.94) 0%,rgba(6,9,18,.80) 38%,rgba(6,9,18,.18) 72%,rgba(6,9,18,.42) 100%)}
+.mwrap{position:relative;display:flex;flex-direction:column;gap:14px;
+  width:min(560px,100%);height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:calc(env(safe-area-inset-top) + 20px) 22px calc(env(safe-area-inset-bottom) + 18px)
+          calc(env(safe-area-inset-left) + 24px)}
+.mhead{display:flex;flex-direction:column;gap:10px}
+.mkicker{font-size:10px;letter-spacing:3.4px;text-transform:uppercase;color:#8fa6d8;font-weight:700}
+#menu h1{font-size:clamp(32px,8vw,54px);font-weight:900;letter-spacing:-1px;line-height:.92;
+  color:#fff;-webkit-text-fill-color:#fff;background:none;text-align:left;margin-top:2px}
+#menu h1 em{display:block;font-style:normal;font-weight:300;letter-spacing:11px;font-size:.42em;
+  color:#c9a6ff;-webkit-text-fill-color:#c9a6ff;margin-top:6px;padding-left:3px}
+.mcareer{font-size:11px;color:#9fb0cc;line-height:1.7;opacity:.9}
+.mcareer b{color:#ffd76a}
+
+/* Modus-Karten: die eine Entscheidung, die man vor jedem Match trifft */
+.modes{display:flex;flex-direction:column;gap:8px;margin-top:2px}
+.mode{pointer-events:auto;display:flex;align-items:center;gap:12px;text-align:left;
+  padding:12px 14px;border-radius:12px;border:1px solid rgba(150,175,225,.20);
+  background:rgba(10,15,28,.62);color:#dbe6ff;backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  transition:border-color .14s,background .14s,transform .08s}
+.mode:active{transform:scale(.99)}
+.mode.sel{border-color:#c9a6ff;background:rgba(56,32,92,.62);box-shadow:0 0 0 1px rgba(201,166,255,.35)}
+.mode .mi{width:34px;height:34px;flex:0 0 34px;border-radius:9px;display:grid;place-items:center;
+  font-size:17px;background:rgba(255,255,255,.07)}
+.mode.sel .mi{background:rgba(201,166,255,.22)}
+.mode .mtx{display:flex;flex-direction:column;min-width:0;flex:1;padding-right:64px}
+.mode .mt{display:block;font-size:14px;font-weight:800;letter-spacing:.3px}
+.mode .ms{display:block;font-size:11px;opacity:.65;margin-top:2px}
+.mode{position:relative}
+/* Fest positioniert statt ueber Flex: im Flexfluss ist die Marke aus der
+   Karte herausgerutscht. */
+.mode .mk{position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  font-size:9px;font-weight:800;letter-spacing:1.4px;opacity:0;color:#c9a6ff;white-space:nowrap}
+.mode.sel .mk{opacity:1}
+
+.mactions{display:flex;align-items:center;gap:10px;margin-top:4px}
+.mactions .big{margin-top:0;flex:1;padding:16px 0;font-size:18px;border-radius:13px;
+  background:linear-gradient(180deg,#ffe08a,#f0a92e);color:#2a1a00;
+  box-shadow:0 10px 26px rgba(240,169,46,.28)}
+.mactions .ghost{margin-top:0;padding:15px 16px;border-radius:13px;font-size:11px}
+#opts{margin-top:2px;display:flex;flex-wrap:wrap;gap:7px;max-width:100%;justify-content:flex-start}
+.opt{padding:8px 12px;border-radius:9px;font-size:10.5px;min-width:0;
+  background:rgba(10,15,28,.6);border:1px solid rgba(150,175,225,.18)}
+.mfoot{margin-top:auto;padding-top:10px;font-size:10.5px;color:#7f90ad;line-height:1.7}
+.mfoot b{color:#aebde0}
+@media (max-width:520px){ .mwrap{width:100%} #menu::before{
+  background:linear-gradient(180deg,rgba(6,9,18,.90) 0%,rgba(6,9,18,.72) 45%,rgba(6,9,18,.92) 100%)} }
+
 .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:radial-gradient(120% 90% at 50% 0%,#22305c 0%,#070b16 70%);
   pointer-events:auto;padding:calc(env(safe-area-inset-top) + 14px) 18px calc(env(safe-area-inset-bottom) + 14px);
@@ -242,6 +310,7 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
   <div id="cross"><i></i></div>
   <div id="marks"></div>
   <div id="vign"></div>
+  <div id="keys"></div>
   <div id="hitm"><i></i><u></u></div>
   <div class="btn" id="bJump" data-act="jump"><div class="ic">🪂</div><div class="lb">ABSPRINGEN</div></div>
   <div id="alt"></div>
@@ -265,28 +334,44 @@ h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-te
 </div>
 
 <div class="screen" id="menu">
-  <h1>SCHOTTER<span>ROYALE · SOLO · OFFLINE</span></h1>
-  <button class="big" id="play">SPIELEN</button>
-  <div id="opts">
-    <button class="opt" data-opt="bots">Gegner: <b>100</b></button>
-    <button class="opt" data-opt="diff">Schwierigkeit: <b>Normal</b></button>
-    <button class="opt" data-opt="autofire">Auto-Feuer: <b>An</b></button>
-    <button class="opt" data-opt="aim">Zielhilfe: <b>Normal</b></button>
-    <button class="opt" data-opt="speed">Match-Tempo: <b>Schnell</b></button>
-    <button class="opt" data-opt="sound">Sound: <b>An</b></button>
-    <button class="opt" data-opt="hand">Layout: <b>Rechts</b></button>
-    <button class="opt" data-opt="view">Ansicht: <b>Ego 3D</b></button>
-    <button class="opt" data-opt="quer">Ausrichtung: <b>Automatisch</b></button>
-    <button class="opt" data-opt="sens">Blick-Tempo: <b>Normal</b></button>
-    <button class="opt" data-opt="start">Startwaffe: <b>Pistole</b></button>
-    <button class="opt" data-opt="marks">Gegner-Marker: <b>An</b></button>
-    <button class="opt" data-opt="tapfire">Tippen = Schuss: <b>An</b></button>
-    <button class="opt" data-opt="autorun">Auto-Sprint: <b>An</b></button>
-    <button class="opt" data-opt="quality">Grafik: <b>Auto</b></button>
+  <div class="mwrap">
+    <header class="mhead">
+      <div class="mlogo">
+        <span class="mkicker">Solo · Trupps · Blitz — komplett offline</span>
+        <h1>SCHOTTER<em>ROYALE</em></h1>
+      </div>
+      <div class="mcareer" id="stats"></div>
+    </header>
+
+    <section class="modes" id="modeCards"></section>
+
+    <div class="mactions">
+      <button class="big" id="play">SPIELEN</button>
+      <button class="ghost" id="optToggle">Einstellungen</button>
+    </div>
+
+    <section id="opts" class="hide">
+      <button class="opt" data-opt="bots">Gegner: <b>100</b></button>
+      <button class="opt" data-opt="diff">Schwierigkeit: <b>Normal</b></button>
+      <button class="opt" data-opt="view">Ansicht: <b>Ego 3D</b></button>
+      <button class="opt" data-opt="quer">Ausrichtung: <b>Automatisch</b></button>
+      <button class="opt" data-opt="sens">Blick-Tempo: <b>Normal</b></button>
+      <button class="opt" data-opt="aim">Zielhilfe: <b>Normal</b></button>
+      <button class="opt" data-opt="autofire">Auto-Feuer: <b>An</b></button>
+      <button class="opt" data-opt="tapfire">Tippen = Schuss: <b>An</b></button>
+      <button class="opt" data-opt="autorun">Auto-Sprint: <b>An</b></button>
+      <button class="opt" data-opt="start">Startwaffe: <b>Pistole</b></button>
+      <button class="opt" data-opt="marks">Gegner-Marker: <b>An</b></button>
+      <button class="opt" data-opt="speed">Match-Tempo: <b>Schnell</b></button>
+      <button class="opt" data-opt="sound">Sound: <b>An</b></button>
+      <button class="opt" data-opt="hand">Layout: <b>Rechts</b></button>
+      <button class="opt" data-opt="quality">Grafik: <b>Auto</b></button>
+    </section>
+
+    <footer class="mfoot">
+      <span id="ctrlHint"></span>
+    </footer>
   </div>
-  <div id="stats"></div>
-  <div class="tip">Links ziehen = laufen · Rechts ziehen = zielen · Alles läuft offline auf dem iPhone.<br>
-  Tipp: Über <b>Teilen → Zum Home-Bildschirm</b> hinzufügen für Vollbild.</div>
 </div>
 
 <div class="screen hide" id="result">

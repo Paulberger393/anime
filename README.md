@@ -42,6 +42,32 @@ Pages ist das automatisch gegeben.
 
 ---
 
+## Modi
+
+| Modus | Beschreibung |
+|---|---|
+| **Solo** | Jeder gegen jeden, bis zu 120 Gegner |
+| **Trupps** | Du und drei Verbündete gegen 24 weitere Vierer-Trupps. Kein Eigenbeschuss, Verbündete werden auch durch Wände markiert, gewonnen hat der letzte Trupp |
+| **Blitz** | 40 Gegner, kleiner Kreis, alle starten bewaffnet, Sturm zieht doppelt so schnell |
+
+---
+
+## Am PC spielen
+
+Die HTML-Einzeldatei doppelklicken — das Spiel erkennt Maus und Tastatur selbst,
+blendet die Daumenknöpfe aus und blendet stattdessen eine Tastenlegende ein.
+
+| Eingabe | Wirkung |
+|---|---|
+| **WASD** | Laufen (blickrelativ) |
+| **Maus** | Umschauen — ein Klick ins Bild sperrt den Mauszeiger wie in jedem Shooter |
+| **Linksklick** | Feuern · **Rechtsklick** zielen |
+| **Shift** | Sprinten · **Leertaste** abspringen |
+| **R / E / Q / F / B** | Nachladen · Aufheben · Heilen · Hacke · Bauen |
+| **1–5** / **Mausrad** | Waffe wechseln |
+
+---
+
 ## Steuerung
 
 | Eingabe | Wirkung |
@@ -105,6 +131,7 @@ Bewegung *und* Kugeln und lassen sich zerschießen.
 | **Match-Tempo** | Normal · Schnell (~3,5 Min) · Blitz — skaliert alle Sturmphasen |
 | **Sound** | An/Aus |
 | **Layout** | Rechts- oder Linkshänder (tauscht Lauf- und Zielstick) |
+| **Modus** | Solo, Trupps oder Blitz |
 | **Ansicht** | **Ego 3D** oder **Top-Down** (die 2D-Ansicht bleibt als Rückfallebene erhalten) |
 | **Ausrichtung** | Automatisch, Quer ↺ oder Quer ↻ — bei aktiver Rotationssperre dreht das Spiel sein Bild selbst |
 | **Blick-Tempo** | Empfindlichkeit des Wischens, fünf Stufen |
@@ -115,6 +142,10 @@ Bewegung *und* Kugeln und lassen sich zerschießen.
 | **Grafik** | Auto (max. 2× Pixeldichte) · Hoch · Sparsam — bei älteren iPhones „Sparsam" |
 
 Siege, Kills und Rekorde werden lokal im Gerät gespeichert.
+
+Der Startbildschirm zeigt die echte Insel im Hintergrund: nach dem Laden wird
+eine Welt erzeugt und eine Kamera kreist langsam über einem Ort, während davor
+Modus-Auswahl, Einstellungen und Karriere-Statistik liegen.
 
 ---
 
@@ -138,6 +169,11 @@ Die Spielwelt ist weiterhin zweidimensional — das 3D-Bild legt sie nur auf die
 Ebene: Welt-x wird 3D-x, Welt-y wird 3D-z, Höhe ist die neue 3D-y-Achse. Dadurch
 laufen Kollision, KI, Sturm, Loot und Bauen unverändert weiter; getauscht wurden
 Renderer, Kamera und Eingabe. Maßstab: 50 Einheiten sind ein Meter.
+
+Gerendert wird mit PBR-Materialien (Rauheit und Metallgrad statt einfacher
+Lambert-Schattierung) und filmischem ACES-Tone-Mapping — Lichter laufen weich
+aus, statt bei Weiß umzuklappen. Das ist der größte einzelne Schritt weg vom
+flachen Plastik-Look.
 
 Die Sonne wirft echte Schatten. Eine kartenweite Shadow-Map wäre bei 6600
 Einheiten unbrauchbar grob, deshalb folgt eine enge Ortho-Kamera von 1300
