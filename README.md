@@ -4,6 +4,8 @@ Ein **komplett offline** spielbares Solo-Battle-Royale fürs iPhone — im Stil 
 als **3D-Shooter aus der Ego-Perspektive**. Kein Server, kein Login, kein Internet nötig.
 Alles läuft lokal auf dem Handy.
 
+<sub>Projekt: **philipp** · Repository `Paulberger393/anime`</sub>
+
 ![Genre](https://img.shields.io/badge/Modus-Solo%20Battle%20Royale-8a4fd8)
 ![Offline](https://img.shields.io/badge/Offline-100%25-3ddc84)
 ![Ziel](https://img.shields.io/badge/Plattform-iPhone%20(PWA)-4aa3ff)
