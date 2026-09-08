@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Schotter">
+<meta name="theme-color" content="#0b1020">
+<meta name="color-scheme" content="dark">
+<title>SCHOTTER ROYALE</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{position:fixed;inset:0;width:100%;height:100%;overflow:hidden;background:#080c18;
+  overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  font-family:"Avenir Next","Helvetica Neue",system-ui,-apple-system,sans-serif;color:#eaf0ff}
+/* Die Buehne haelt Leinwaende, HUD und Menues. Steht das iPhone in der
+   Rotationssperre, dreht Safari die Seite nicht — dann drehen wir die
+   Buehne selbst um 90°, und quer gehalten steht das Bild richtig. */
+#stage{position:absolute;inset:0}
+body.quer #stage {width:100vh;height:100vw;top:0;left:100%;
+  transform-origin:0 0;transform:rotate(90deg)}
+body.quer2 #stage{width:100vh;height:100vw;top:100%;left:0;
+  transform-origin:0 0;transform:rotate(-90deg)}
+#gl{position:absolute;inset:0;display:block;width:100%;height:100%}
+#game{position:absolute;inset:0;display:block;width:100%;height:100%}
+#hud{position:absolute;inset:0;pointer-events:none;
+  padding:calc(env(safe-area-inset-top) + 8px) calc(env(safe-area-inset-right) + 10px)
+          calc(env(safe-area-inset-bottom) + 8px) calc(env(safe-area-inset-left) + 10px)}
+.hide{display:none!important}
+
+/* ---------- generic button ---------- */
+.btn{position:absolute;display:flex;align-items:center;justify-content:center;flex-direction:column;
+  border-radius:50%;background:rgba(16,24,44,.5);border:2px solid rgba(150,180,255,.28);
+  color:#dbe6ff;font-weight:700;letter-spacing:.5px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  text-align:center;line-height:1.05;transition:transform .06s,background .1s,border-color .1s}
+.btn.on{background:rgba(90,150,255,.55);border-color:#bcd4ff;transform:scale(.94)}
+.btn .ic{font-size:19px}
+.btn .lb{font-size:8px;opacity:.75;margin-top:2px}
+.btn .sub{font-size:9px;opacity:.9;margin-top:1px;font-variant-numeric:tabular-nums}
+
+/* Thumb-friendly landscape layout: the bottom-left quadrant stays completely
+   free for the movement thumb, everything actionable arcs around the right one.
+   Buttons sit low because a landscape iPhone is only ~390pt tall. */
+#bFire{width:96px;height:96px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 54px);
+  background:rgba(255,72,72,.30);border-color:rgba(255,140,140,.55)}
+#bFire.on{background:rgba(255,72,72,.7)}
+#bFire .ic{font-size:30px}
+#bPick  {width:50px;height:50px;right:106px;bottom:calc(env(safe-area-inset-bottom) + 58px)}
+#bReload{width:52px;height:52px;right:104px;bottom:calc(env(safe-area-inset-bottom) + 120px)}
+#bUse   {width:56px;height:56px;right:20px;bottom:calc(env(safe-area-inset-bottom) + 152px);
+  background:rgba(80,200,140,.34);border-color:rgba(140,255,200,.6)}
+#bHeal  {width:50px;height:50px;right:92px;bottom:calc(env(safe-area-inset-bottom) + 180px)}
+#bBuild {width:56px;height:56px;left:14px;bottom:calc(env(safe-area-inset-bottom) + 150px);
+  background:rgba(255,190,60,.26);border-color:rgba(255,215,130,.5)}
+#bBuild.on{background:rgba(255,190,60,.65);color:#241a00}
+#bSprint{width:50px;height:50px;left:80px;bottom:calc(env(safe-area-inset-bottom) + 176px)}
+#buildBar{position:absolute;left:14px;bottom:calc(env(safe-area-inset-bottom) + 214px);display:flex;gap:7px}
+#buildBar .btn{position:relative;width:48px;height:48px;left:auto;bottom:auto}
+
+/* ---------- weapon slots ---------- */
+#slots{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 5px);
+  display:flex;gap:5px}
+.slot{width:50px;height:40px;border-radius:9px;background:rgba(12,18,34,.62);border:2px solid rgba(140,170,230,.25);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.slot .n{position:absolute;top:1px;left:4px;font-size:8px;opacity:.5}
+.slot .ic{font-size:16px;line-height:1}
+.slot .am{font-size:8px;opacity:.85;font-variant-numeric:tabular-nums;margin-top:1px}
+.slot.sel{border-color:#ffd76a;background:rgba(60,48,12,.75);box-shadow:0 0 12px rgba(255,200,80,.35)}
+.slot .rar{position:absolute;left:0;right:0;bottom:0;height:3px;background:#666}
+
+/* ---------- top-left vitals ---------- */
+#vitals{position:absolute;left:calc(env(safe-area-inset-left) + 10px);top:calc(env(safe-area-inset-top) + 8px);width:170px}
+.bar{height:13px;border-radius:7px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.16);
+  overflow:hidden;margin-bottom:4px;position:relative}
+.bar i{display:block;height:100%;width:100%;transform-origin:left;transition:transform .12s linear}
+#shBar i{background:linear-gradient(90deg,#39c8ff,#8fe6ff)}
+#hpBar i{background:linear-gradient(90deg,#3ddc84,#a8ffcf)}
+.bar span{position:absolute;inset:0;font-size:9px;line-height:13px;text-align:center;
+  text-shadow:0 1px 2px #000;font-variant-numeric:tabular-nums;font-weight:700}
+#mats{display:flex;gap:10px;margin-top:5px;font-size:11px;font-weight:700;text-shadow:0 1px 3px #000}
+#mats b{font-variant-numeric:tabular-nums}
+
+/* ---------- top-center info ---------- */
+#top{position:absolute;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 6px);
+  text-align:center;text-shadow:0 2px 4px #000}
+#alive{font-size:20px;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums}
+#alive small{font-size:10px;opacity:.65;font-weight:600;letter-spacing:2px;display:block;margin-top:-2px}
+#storm{font-size:11px;margin-top:3px;opacity:.9;font-weight:700}
+#storm.warn{color:#ff9de0}
+#kills{font-size:11px;margin-top:2px;opacity:.85;font-weight:700}
+
+/* ---------- minimap ---------- */
+#mapWrap{position:absolute;right:calc(env(safe-area-inset-right) + 10px);top:calc(env(safe-area-inset-top) + 8px);
+  width:96px;height:96px;border-radius:12px;overflow:hidden;border:2px solid rgba(160,190,255,.3);
+  background:rgba(6,10,20,.65)}
+#mapC{width:100%;height:100%;display:block}
+
+/* ---------- kill feed / toasts ---------- */
+#feed{position:absolute;right:calc(env(safe-area-inset-right) + 10px);top:calc(env(safe-area-inset-top) + 112px);
+  width:190px;text-align:right;font-size:10px;line-height:1.5}
+#feed div{background:rgba(6,10,22,.55);border-radius:5px;padding:2px 6px;margin-bottom:3px;
+  display:inline-block;max-width:100%;animation:fadein .18s ease}
+#feed .me{color:#ffd76a;font-weight:800}
+@keyframes fadein{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+
+#toast{position:absolute;left:50%;top:52%;transform:translateX(-50%);text-align:center;
+  font-size:15px;font-weight:800;text-shadow:0 2px 8px #000;pointer-events:none;opacity:0;transition:opacity .2s}
+#toast.show{opacity:1}
+
+#hint{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 60px);
+  font-size:11px;font-weight:700;background:rgba(10,16,30,.7);padding:5px 12px;border-radius:20px;
+  border:1px solid rgba(150,255,200,.4);text-shadow:0 1px 3px #000;white-space:nowrap}
+
+/* Portrait on a 390pt-wide phone: the vitals block and the centred match
+   info collide, so stack them instead of overlapping. */
+@media (max-width:520px){
+  #vitals{width:140px}
+  #top{top:calc(env(safe-area-inset-top) + 54px)}
+  #alive{font-size:17px}
+  #alive small{font-size:9px}
+  #storm,#kills{font-size:10px}
+  #mapWrap{width:82px;height:82px}
+  #feed{width:152px;font-size:9px;top:calc(env(safe-area-inset-top) + 98px)}
+  #toast{font-size:13px}
+}
+
+/* Fadenkreuz: dünn und hell genug fürs Sonnenlicht, ohne die Sicht zu verstopfen */
+#cross{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;pointer-events:none}
+#cross::before,#cross::after{content:"";position:absolute;background:rgba(255,255,255,.85);
+  box-shadow:0 0 3px rgba(0,0,0,.9)}
+#cross::before{left:50%;top:0;width:2px;height:26px;margin-left:-1px}
+#cross::after{top:50%;left:0;height:2px;width:26px;margin-top:-1px}
+#cross i{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;
+  background:rgba(0,0,0,.55);box-shadow:0 0 0 1px rgba(255,255,255,.7)}
+#cross.hit::before,#cross.hit::after{background:#ff6b6b}
+#cross.lock::before,#cross.lock::after{background:#ff9d3a;box-shadow:0 0 6px #ff6b2a}
+
+/* Gegnermarker: ohne die findet man in der Ego-Sicht schlicht niemanden. */
+#marks{position:absolute;inset:0;pointer-events:none}
+.mk{position:absolute;transform:translate(-50%,-100%);text-align:center;white-space:nowrap;
+  transition:opacity .12s}
+.mk b{display:block;font-size:10px;font-weight:800;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;
+  letter-spacing:.3px}
+.mk i{display:block;width:44px;height:4px;margin:2px auto 0;border-radius:2px;
+  background:rgba(0,0,0,.6);overflow:hidden}
+.mk i s{display:block;height:100%;background:#4ade80;text-decoration:none;transform-origin:left}
+.mk.sh i s{background:#39c8ff}
+.mk u{display:block;font-size:9px;opacity:.75;text-decoration:none;margin-top:1px;
+  text-shadow:0 1px 3px #000}
+.mk.far b{font-size:9px;opacity:.8}
+.mk.far i{width:30px;height:3px}
+/* Verbündete: grün, mit Schild-Zeichen, klar von Gegnern getrennt */
+.mk.mate b{color:#7dffb0}
+.mk.mate b::before{content:"🛡 "}
+.mk.mate i s{background:#7dffb0}
+
+/* Trefferbestaetigung: vier Striche, die kurz aufblitzen */
+#hitm{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;
+  pointer-events:none;opacity:0}
+#hitm.on{opacity:1;animation:hitpop .32s ease-out}
+#hitm::before,#hitm::after,#hitm i,#hitm u{content:"";position:absolute;width:12px;height:3px;
+  background:#fff;box-shadow:0 0 4px #000;border-radius:2px}
+#hitm::before{left:0;top:6px;transform:rotate(45deg)}
+#hitm::after{right:0;top:6px;transform:rotate(-45deg)}
+#hitm.kill::before,#hitm.kill::after{background:#ff5252}
+@keyframes hitpop{0%{transform:scale(.6);opacity:1}100%{transform:scale(1.5);opacity:0}}
+@media (prefers-reduced-motion:reduce){#hitm.on{animation:none}}
+
+/* leichte Abdunklung zu den Raendern — nimmt dem Bild das Flache */
+#vign{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 80% at 50% 48%,transparent 45%,rgba(0,0,0,.42) 100%)}
+
+/* Absprung: gross und mittig, weil man im Bus sonst nicht weiss, was zu tun ist */
+#bJump{width:120px;height:120px;left:50%;top:50%;margin:-60px 0 0 -60px;
+  background:rgba(90,200,255,.32);border-color:rgba(180,235,255,.85);border-width:3px;
+  animation:puls 1.1s ease-in-out infinite}
+#bJump .ic{font-size:38px}
+#bJump .lb{font-size:11px;letter-spacing:1px;margin-top:4px}
+#bJump.on{animation:none;background:rgba(90,200,255,.75)}
+@keyframes puls{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
+@media (prefers-reduced-motion:reduce){#bJump{animation:none}}
+#alt{position:absolute;left:50%;top:50%;margin:70px 0 0 -80px;width:160px;text-align:center;
+  font-size:13px;font-weight:800;letter-spacing:1px;text-shadow:0 2px 6px #000}
+
+/* Am PC steuert die Tastatur — die Daumenknoepfe waeren nur Unrat im Bild.
+   Die Waffenleiste bleibt, sie ist auch dort eine nuetzliche Anzeige. */
+body.pc .btn{display:none!important}
+body.pc #bJump{display:flex!important}
+body.pc #slots{bottom:calc(env(safe-area-inset-bottom) + 10px)}
+#keys{position:absolute;left:calc(env(safe-area-inset-left) + 12px);
+  bottom:calc(env(safe-area-inset-bottom) + 10px);font-size:10px;line-height:1.75;color:#9fb0cc;
+  text-shadow:0 1px 3px #000;pointer-events:none;display:none}
+body.pc #keys{display:block}
+#keys b{color:#e6eeff}
+
+#dmgFlash{position:absolute;inset:0;pointer-events:none;opacity:0;
+  box-shadow:inset 0 0 120px 30px rgba(255,40,40,.85);transition:opacity .25s}
+
+/* ---------- overlays ---------- */
+/* ---------- Startbildschirm ----------
+   Hinter dem Menue laeuft die echte 3D-Insel mit langsam kreisender Kamera.
+   Die Flaechen darueber sind bewusst dunkel und schmal, damit man sie sieht. */
+#menu{background:none;justify-content:stretch;align-items:stretch;padding:0}
+#menu::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(105deg,rgba(6,9,18,.94) 0%,rgba(6,9,18,.80) 38%,rgba(6,9,18,.18) 72%,rgba(6,9,18,.42) 100%)}
+.mwrap{position:relative;display:flex;flex-direction:column;gap:14px;
+  width:min(560px,100%);height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:calc(env(safe-area-inset-top) + 20px) 22px calc(env(safe-area-inset-bottom) + 18px)
+          calc(env(safe-area-inset-left) + 24px)}
+.mhead{display:flex;flex-direction:column;gap:10px}
+.mkicker{font-size:10px;letter-spacing:3.4px;text-transform:uppercase;color:#8fa6d8;font-weight:700}
+#menu h1{font-size:clamp(32px,8vw,54px);font-weight:900;letter-spacing:-1px;line-height:.92;
+  color:#fff;-webkit-text-fill-color:#fff;background:none;text-align:left;margin-top:2px}
+#menu h1 em{display:block;font-style:normal;font-weight:300;letter-spacing:11px;font-size:.42em;
+  color:#c9a6ff;-webkit-text-fill-color:#c9a6ff;margin-top:6px;padding-left:3px}
+.mcareer{font-size:11px;color:#9fb0cc;line-height:1.7;opacity:.9}
+.mcareer b{color:#ffd76a}
+
+/* Modus-Karten: die eine Entscheidung, die man vor jedem Match trifft */
+.modes{display:flex;flex-direction:column;gap:8px;margin-top:2px}
+.mode{pointer-events:auto;display:flex;align-items:center;gap:12px;text-align:left;
+  padding:12px 14px;border-radius:12px;border:1px solid rgba(150,175,225,.20);
+  background:rgba(10,15,28,.62);color:#dbe6ff;backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  transition:border-color .14s,background .14s,transform .08s}
+.mode:active{transform:scale(.99)}
+.mode.sel{border-color:#c9a6ff;background:rgba(56,32,92,.62);box-shadow:0 0 0 1px rgba(201,166,255,.35)}
+.mode .mi{width:34px;height:34px;flex:0 0 34px;border-radius:9px;display:grid;place-items:center;
+  font-size:17px;background:rgba(255,255,255,.07)}
+.mode.sel .mi{background:rgba(201,166,255,.22)}
+.mode .mtx{display:flex;flex-direction:column;min-width:0;flex:1;padding-right:64px}
+.mode .mt{display:block;font-size:14px;font-weight:800;letter-spacing:.3px}
+.mode .ms{display:block;font-size:11px;opacity:.65;margin-top:2px}
+.mode{position:relative}
+/* Fest positioniert statt ueber Flex: im Flexfluss ist die Marke aus der
+   Karte herausgerutscht. */
+.mode .mk{position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  font-size:9px;font-weight:800;letter-spacing:1.4px;opacity:0;color:#c9a6ff;white-space:nowrap}
+.mode.sel .mk{opacity:1}
+
+.mactions{display:flex;align-items:center;gap:10px;margin-top:4px}
+.mactions .big{margin-top:0;flex:1;padding:16px 0;font-size:18px;border-radius:13px;
+  background:linear-gradient(180deg,#ffe08a,#f0a92e);color:#2a1a00;
+  box-shadow:0 10px 26px rgba(240,169,46,.28)}
+.mactions .ghost{margin-top:0;padding:15px 16px;border-radius:13px;font-size:11px}
+#opts{margin-top:2px;display:flex;flex-wrap:wrap;gap:7px;max-width:100%;justify-content:flex-start}
+.opt{padding:8px 12px;border-radius:9px;font-size:10.5px;min-width:0;
+  background:rgba(10,15,28,.6);border:1px solid rgba(150,175,225,.18)}
+.mfoot{margin-top:auto;padding-top:10px;font-size:10.5px;color:#7f90ad;line-height:1.7}
+.mfoot b{color:#aebde0}
+@media (max-width:520px){ .mwrap{width:100%} #menu::before{
+  background:linear-gradient(180deg,rgba(6,9,18,.90) 0%,rgba(6,9,18,.72) 45%,rgba(6,9,18,.92) 100%)} }
+
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:radial-gradient(120% 90% at 50% 0%,#22305c 0%,#070b16 70%);
+  pointer-events:auto;padding:calc(env(safe-area-inset-top) + 14px) 18px calc(env(safe-area-inset-bottom) + 14px);
+  overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y}
+h1{font-size:34px;font-weight:900;letter-spacing:3px;
+  background:linear-gradient(180deg,#fff,#7fb0ff);-webkit-background-clip:text;background-clip:text;color:transparent;
+  text-align:center;line-height:1}
+h1 span{display:block;font-size:12px;letter-spacing:6px;color:#8fa6d8;-webkit-text-fill-color:#8fa6d8;margin-top:6px}
+.big{pointer-events:auto;margin-top:18px;padding:15px 46px;border-radius:14px;font-size:19px;font-weight:900;
+  letter-spacing:2px;border:none;color:#08121f;background:linear-gradient(180deg,#8ce7ff,#3aa9ff);
+  box-shadow:0 8px 24px rgba(58,169,255,.4)}
+.big:active{transform:scale(.96)}
+.ghost{margin-top:10px;padding:10px 26px;border-radius:11px;font-size:12px;font-weight:800;letter-spacing:1.4px;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);color:#dbe6ff;pointer-events:auto}
+#opts{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:460px}
+.opt{pointer-events:auto;padding:9px 14px;border-radius:10px;font-size:11px;font-weight:700;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);color:#cfdcff;min-width:120px}
+.opt b{color:#ffd76a}
+#stats{margin-top:14px;font-size:11px;opacity:.65;text-align:center;line-height:1.7}
+#res{font-size:12px;text-align:center;line-height:1.9;margin-top:12px;opacity:.95}
+#resT{font-size:30px;font-weight:900;letter-spacing:2px;text-align:center}
+#resS{font-size:13px;opacity:.7;letter-spacing:2px;margin-top:4px;text-align:center}
+.tip{margin-top:18px;font-size:10.5px;opacity:.5;max-width:340px;text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="stage">
+<canvas id="gl"></canvas>
+<canvas id="game"></canvas>
+
+<div id="hud" class="hide">
+  <div id="vitals">
+    <div class="bar" id="shBar"><i></i><span></span></div>
+    <div class="bar" id="hpBar"><i></i><span></span></div>
+    <div id="mats">
+      <span style="color:#c99b63">🪵 <b id="mWood">0</b></span>
+      <span style="color:#d98a7a">🧱 <b id="mBrick">0</b></span>
+      <span style="color:#a8b6c8">⚙️ <b id="mMetal">0</b></span>
+    </div>
+  </div>
+
+  <div id="top">
+    <div id="alive">100<small>ÜBRIG</small></div>
+    <div id="storm">Sturm zieht sich zusammen</div>
+    <div id="kills">☠ 0 Kills</div>
+  </div>
+
+  <div id="mapWrap"><canvas id="mapC" width="192" height="192"></canvas></div>
+  <div id="feed"></div>
+  <div id="toast"></div>
+  <div id="hint" class="hide"></div>
+  <div id="dmgFlash"></div>
+  <div id="cross"><i></i></div>
+  <div id="marks"></div>
+  <div id="vign"></div>
+  <div id="keys"></div>
+  <div id="hitm"><i></i><u></u></div>
+  <div class="btn" id="bJump" data-act="jump"><div class="ic">🪂</div><div class="lb">ABSPRINGEN</div></div>
+  <div id="alt"></div>
+
+  <div class="btn" id="bFire"   data-act="fire"><div class="ic">🔫</div><div class="lb">FEUER</div></div>
+  <div class="btn" id="bReload" data-act="reload"><div class="ic">🔄</div><div class="lb">NACHLADEN</div></div>
+  <div class="btn" id="bHeal"   data-act="heal"><div class="ic">🧪</div><div class="lb">HEILEN</div></div>
+  <div class="btn" id="bPick"   data-act="pickaxe"><div class="ic">⛏️</div><div class="lb">HACKE</div></div>
+  <div class="btn" id="bUse"    data-act="use"><div class="ic">✋</div><div class="lb">AUFHEBEN</div></div>
+  <div class="btn" id="bSprint" data-act="sprint"><div class="ic">💨</div><div class="lb">SPRINT</div></div>
+  <div class="btn" id="bBuild"  data-act="build"><div class="ic">🏗️</div><div class="lb">BAUEN</div></div>
+
+  <div id="buildBar" class="hide">
+    <div class="btn" data-act="bwall"><div class="ic">🟫</div><div class="lb">WAND</div></div>
+    <div class="btn" data-act="bcorner"><div class="ic">📐</div><div class="lb">ECKE</div></div>
+    <div class="btn" data-act="bbox"><div class="ic">▣</div><div class="lb">BOX</div></div>
+    <div class="btn" data-act="bmat"><div class="ic">🪵</div><div class="lb">MATERIAL</div></div>
+  </div>
+
+  <div id="slots"></div>
+</div>
+
+<div class="screen" id="menu">
+  <div class="mwrap">
+    <header class="mhead">
+      <div class="mlogo">
+        <span class="mkicker">Solo · Trupps · Blitz — komplett offline</span>
+        <h1>SCHOTTER<em>ROYALE</em></h1>
+      </div>
+      <div class="mcareer" id="stats"></div>
+    </header>
+
+    <section class="modes" id="modeCards"></section>
+
+    <div class="mactions">
+      <button class="big" id="play">SPIELEN</button>
+      <button class="ghost" id="optToggle">Einstellungen</button>
+    </div>
+
+    <section id="opts" class="hide">
+      <button class="opt" data-opt="bots">Gegner: <b>100</b></button>
+      <button class="opt" data-opt="diff">Schwierigkeit: <b>Normal</b></button>
+      <button class="opt" data-opt="view">Ansicht: <b>Ego 3D</b></button>
+      <button class="opt" data-opt="quer">Ausrichtung: <b>Automatisch</b></button>
+      <button class="opt" data-opt="sens">Blick-Tempo: <b>Normal</b></button>
+      <button class="opt" data-opt="aim">Zielhilfe: <b>Normal</b></button>
+      <button class="opt" data-opt="autofire">Auto-Feuer: <b>An</b></button>
+      <button class="opt" data-opt="tapfire">Tippen = Schuss: <b>An</b></button>
+      <button class="opt" data-opt="autorun">Auto-Sprint: <b>An</b></button>
+      <button class="opt" data-opt="start">Startwaffe: <b>Pistole</b></button>
+      <button class="opt" data-opt="marks">Gegner-Marker: <b>An</b></button>
+      <button class="opt" data-opt="speed">Match-Tempo: <b>Schnell</b></button>
+      <button class="opt" data-opt="sound">Sound: <b>An</b></button>
+      <button class="opt" data-opt="hand">Layout: <b>Rechts</b></button>
+      <button class="opt" data-opt="quality">Grafik: <b>Auto</b></button>
+    </section>
+
+    <footer class="mfoot">
+      <span id="ctrlHint"></span>
+    </footer>
+  </div>
+</div>
+
+<div class="screen hide" id="result">
+  <div id="resT">#1</div>
+  <div id="resS">VICTORY ROYALE</div>
+  <div id="res"></div>
+  <button class="big" id="again">NEUES MATCH</button>
+  <button class="ghost" id="toMenu">HAUPTMENÜ</button>
+</div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="js/core.js"></script>
+<script src="js/data.js"></script>
+<script src="js/world.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/render3d.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
